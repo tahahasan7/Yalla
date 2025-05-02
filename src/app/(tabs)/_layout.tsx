@@ -1,6 +1,6 @@
-import { MaterialIcons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import { Platform, View } from "react-native";
+import { Icon } from "../../components/common";
 import { DarkTheme, DefaultTheme } from "../../constants/theme";
 import { useColorScheme } from "../../hooks/useColorScheme";
 
@@ -65,8 +65,9 @@ export default function TabLayout() {
         name="goals"
         options={{
           title: "Goals",
+          headerShown: false,
           tabBarIcon: ({ color, size }: TabBarIconProps) => (
-            <MaterialIcons name="flag" size={size} color={color} />
+            <Icon name="StickyNote" color={color} size={size} />
           ),
         }}
       />
@@ -76,7 +77,7 @@ export default function TabLayout() {
         options={{
           title: "Camera",
           tabBarIcon: ({ color, size }: TabBarIconProps) => (
-            <MaterialIcons name="camera-alt" size={size} color={color} />
+            <Icon name="Camera" color={color} size={size} />
           ),
         }}
       />
@@ -87,7 +88,7 @@ export default function TabLayout() {
           title: "Social",
           headerShown: false,
           tabBarIcon: ({ color, size }: TabBarIconProps) => (
-            <MaterialIcons name="people" size={size} color={color} />
+            <Icon name="FolderLibrary" color={color} size={size} />
           ),
         }}
       />

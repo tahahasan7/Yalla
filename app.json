@@ -4,10 +4,18 @@
     "slug": "yalla",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./src/assets/images/icon.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
+    "fonts": {
+      "Outfit-Black": "./src/assets/fonts/Outfit-Black.ttf",
+      "Outfit-Bold": "./src/assets/fonts/Outfit-Bold.ttf",
+      "Outfit-Light": "./src/assets/fonts/Outfit-Light.ttf",
+      "Outfit-Medium": "./src/assets/fonts/Outfit-Medium.ttf",
+      "Outfit-Regular": "./src/assets/fonts/Outfit-Regular.ttf",
+      "Outfit-SemiBold": "./src/assets/fonts/Outfit-SemiBold.ttf"
+    },
     "ios": {
       "supportsTablet": true,
       "homeIndicatorAutoHidden": false,
@@ -16,7 +24,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "foregroundImage": "./src/assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "permissions": [
@@ -28,14 +36,14 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./src/assets/images/favicon.png"
     },
     "plugins": [
       "expo-router",
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/splash-icon.png",
+          "image": "./src/assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"

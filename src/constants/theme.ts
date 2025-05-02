@@ -7,7 +7,7 @@ export const DarkTheme = {
   ...NavigationDarkTheme,
   colors: {
     ...NavigationDarkTheme.colors,
-    primary: "#ff8a65",
+    primary: "#F5F378",
     background: "#000000",
     card: "#1e1e1e",
     text: "#ffffff",
