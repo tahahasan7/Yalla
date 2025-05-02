@@ -411,13 +411,18 @@ export default function SocialScreen() {
 
     // Calculate new index with bounds checking
     const rawIndex = offsetY / itemHeight;
+
+    // Use a smaller percentage of the scroll to determine when to move to the next post
+    // This makes it easier to trigger a page change with a smaller swipe gesture
     const newIndex = Math.max(
       0,
       Math.min(Math.round(rawIndex), POSTS.length - 1)
     );
-    const threshold = itemHeight * 0.1; // 10% of the item height as threshold
 
-    // If scroll didn't reach the threshold, snap back to current item
+    // Reduced threshold for easier swiping (from 10% to 3% of post height)
+    const threshold = itemHeight * 0.02;
+
+    // If scroll reaches at least the minimum threshold, snap to corresponding post
     if (Math.abs(offsetY - newIndex * itemHeight) < threshold) {
       if (newIndex >= 0 && newIndex < POSTS.length) {
         flatListRef.current?.scrollToIndex({
@@ -486,12 +491,24 @@ export default function SocialScreen() {
 
         // Only update the index when we're not in a programmatic scroll
         if (!isScrolling.current) {
-          const newIndex = Math.round(offsetY / itemHeight);
-          if (
-            newIndex >= 0 &&
-            newIndex < POSTS.length &&
-            newIndex !== currentIndex
-          ) {
+          // Calculate new index with a bias toward the direction of scroll to make it more responsive
+          const velocity = event.nativeEvent.velocity?.y || 0;
+          const direction = Math.sign(velocity);
+
+          // Base index calculation
+          let newIndex = Math.round(offsetY / itemHeight);
+
+          // Apply a small bias in the direction of the scroll to make it easier to switch posts
+          if (Math.abs(velocity) > 0.5) {
+            // If there's significant velocity, bias the index in that direction slightly
+            // This makes it easier to swipe to the next/previous post
+            newIndex = Math.round(offsetY / itemHeight + direction * 0.2);
+          }
+
+          // Ensure index stays within bounds
+          newIndex = Math.max(0, Math.min(newIndex, POSTS.length - 1));
+
+          if (newIndex !== currentIndex) {
             // Add a small delay to prevent rapid state changes causing flicker
             setTimeout(() => {
               setCurrentIndex(newIndex);
@@ -678,7 +695,7 @@ export default function SocialScreen() {
           showsVerticalScrollIndicator={false}
           snapToInterval={itemHeight}
           snapToAlignment="start"
-          decelerationRate="fast"
+          decelerationRate={0.85} // Changed from "fast" to a numeric value for more control
           disableIntervalMomentum={true}
           onScroll={handleScroll}
           onScrollEndDrag={handleScrollEndDrag}

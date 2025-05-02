@@ -3,6 +3,16 @@ import { Animated, StyleSheet } from "react-native";
 import { FlowStateIconProps } from "../../types/social";
 import { Icon } from "../common";
 
+// If the imported type doesn't include these, we'll define it here
+interface LocalFlowStateIconProps {
+  flowState: string;
+  size?: number; // Optional size
+  color?: string; // Optional color
+}
+
+// Use the combined type
+type CombinedProps = FlowStateIconProps & LocalFlowStateIconProps;
+
 const styles = StyleSheet.create({
   flowIconBackground: {
     width: 30,
@@ -14,7 +24,7 @@ const styles = StyleSheet.create({
   },
 });
 
-const FlowStateIcon = ({ flowState }: FlowStateIconProps) => {
+const FlowStateIcon = ({ flowState, size = 20, color }: CombinedProps) => {
   const animatedScale = useRef(new Animated.Value(1)).current;
 
   // useEffect(() => {
@@ -38,33 +48,33 @@ const FlowStateIcon = ({ flowState }: FlowStateIconProps) => {
   // }, []);
 
   // Keep original icon colors, only change backgrounds to blue shades
-  let iconColor;
+  let iconColor = color;
   let borderColor = "rgba(100, 181, 246, 0.5)";
   let backgroundColor = "rgba(100, 181, 246, 0.1)";
 
   switch (flowState) {
     case "still":
-      iconColor = "rgb(165, 165, 165)"; // Lightest blue
+      iconColor = iconColor || "rgb(165, 165, 165)"; // Lightest blue
       borderColor = "rgba(34, 34, 34, 0.55)";
       backgroundColor = "rgb(0, 0, 0.9)";
       break;
     case "kindling":
-      iconColor = "rgba(136, 136, 136, 0.99)";
+      iconColor = iconColor || "rgba(136, 136, 136, 0.99)";
       borderColor = "rgba(34, 34, 34, 0.55)";
       backgroundColor = "rgb(0, 0, 0)";
       break;
     case "glowing":
+      iconColor = iconColor || undefined;
       borderColor = "rgba(34, 34, 34, 0.55)";
       backgroundColor = "rgb(0, 0, 0.9)";
-
       break;
     case "flowing":
+      iconColor = iconColor || undefined;
       borderColor = "rgba(34, 34, 34, 0.55)";
       backgroundColor = "rgb(0, 0, 0.9)";
-
       break;
     default:
-      iconColor = "#64B5F6"; // Light blue as fallback
+      iconColor = iconColor || "#64B5F6"; // Light blue as fallback
   }
 
   return (
@@ -72,6 +82,9 @@ const FlowStateIcon = ({ flowState }: FlowStateIconProps) => {
       style={[
         styles.flowIconBackground,
         {
+          width: size + 10,
+          height: size + 10,
+          borderRadius: (size + 10) / 2,
           transform: [{ scale: animatedScale }],
           backgroundColor: backgroundColor,
           borderWidth: 2,
@@ -81,7 +94,7 @@ const FlowStateIcon = ({ flowState }: FlowStateIconProps) => {
     >
       <Icon
         name={flowState.charAt(0).toUpperCase() + flowState.slice(1)}
-        size={20}
+        size={size}
         color={iconColor}
       />
     </Animated.View>
