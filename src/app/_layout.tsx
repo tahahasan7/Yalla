@@ -45,6 +45,14 @@ export default function RootLayout() {
             animation: "none",
           }}
         />
+        <Stack.Screen
+          name="goal-details"
+          options={{
+            headerShown: false,
+            presentation: "card", // or "card" depending on desired animation
+            animation: "slide_from_right", // or your preferred animation style
+          }}
+        />
       </Stack>
     </ThemeProvider>
   );

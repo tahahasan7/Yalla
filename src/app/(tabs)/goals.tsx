@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { router } from "expo-router";
 import React, { useState } from "react";
 import {
   Animated,
@@ -145,8 +146,24 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onLongPress }) => {
   };
 
   const handleGoalPress = () => {
-    console.log(`Goal pressed: ${goal.title}`);
-    // Navigate to detail page
+    // Navigate to the goal details screen with the goal data
+    router.push({
+      pathname: "/goal-details",
+      params: {
+        id: goal.id,
+        title: goal.title,
+        frequency: goal.frequency,
+        duration: goal.duration,
+        color: goal.color,
+        icon: goal.icon,
+        flowState: goal.flowState,
+        lastImage: goal.lastImage,
+        lastImageDate: goal.lastImageDate,
+        progress: goal.progress?.toString(),
+        completed: goal.completed ? "true" : "false",
+        completedDate: goal.completedDate,
+      },
+    });
   };
 
   const handleLongPress = () => {
@@ -202,19 +219,21 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onLongPress }) => {
         <View
           style={[
             styles.goalCard,
-            { backgroundColor: goal.color },
+            { backgroundColor: "#131313" },
             goal.completed && styles.completedGoalCard,
           ]}
         >
           {/* Icon and Title */}
           <View style={styles.headerSection}>
-            <View style={styles.iconContainer}>
+            <View
+              style={[styles.iconContainer, { backgroundColor: goal.color }]}
+            >
               <Icon name={goal.icon} size={22} color="#fff" />
             </View>
             <Text style={styles.goalTitle}>{goal.title}</Text>
 
             {/* Flow state indicator for quick status scanning */}
-            <FlowStateIcon flowState={goal.flowState} size={16} />
+            <FlowStateIcon flowState={goal.flowState} size={22} />
           </View>
 
           {goal.completed ? (
@@ -484,7 +503,7 @@ const styles = StyleSheet.create({
     paddingBottom: 18,
   },
   headerTitle: {
-    fontSize: 36,
+    fontSize: 28,
     fontFamily: FontFamily.SemiBold,
     color: "white",
   },
@@ -683,7 +702,7 @@ const styles = StyleSheet.create({
 
   // Styles for completed goals
   completedGoalCard: {
-    opacity: 0.9,
+    opacity: 0.8,
   },
 
   completedContainer: {
@@ -693,7 +712,7 @@ const styles = StyleSheet.create({
   },
 
   completedBadge: {
-    backgroundColor: "rgba(255, 255, 255, 0.25)",
+    backgroundColor: "rgba(255, 255, 255, 0.3)",
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 10,

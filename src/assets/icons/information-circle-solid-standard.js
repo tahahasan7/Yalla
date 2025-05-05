@@ -1,26 +1,28 @@
 import React from "react";
-import Svg, { Path } from "react-native-svg";
+import Svg, { Path, Rect } from "react-native-svg";
 
-const Information = ({ color = "black", size = 24, ...props }) => {
+const Information = ({ color = "#2C2C2C", size = 21, ...props }) => {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" {...props}>
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 21 21"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      {...props}
+    >
+      <Rect
+        x="6.09668"
+        y="4.06445"
+        width="9.48387"
+        height="13.5484"
+        fill="white"
+      />
       <Path
-        d="M12 22C17.5228 22 22 17.5228 22 12C22 6.47715 17.5228 2 12 2C6.47715 2 2 6.47715 2 12C2 17.5228 6.47715 22 12 22Z"
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M1.09375 10.5C1.09375 5.30507 5.30507 1.09375 10.5 1.09375C15.6949 1.09375 19.9063 5.30506 19.9063 10.5C19.9063 15.6949 15.6949 19.9063 10.5 19.9063C5.30506 19.9063 1.09375 15.6949 1.09375 10.5ZM10.6705 8.77704C10.9029 8.81143 11.2076 8.9033 11.4568 9.17735C11.6952 9.43959 11.7639 9.73945 11.79 9.9533C11.8127 10.1387 11.8126 10.3569 11.8125 10.5527V10.5875V14.4375C11.8125 14.9208 11.4208 15.3125 10.9375 15.3125C10.4542 15.3125 10.0625 14.9208 10.0625 14.4375V10.5875V10.5C9.57924 10.5 9.1875 10.1083 9.1875 9.625C9.1875 9.14174 9.57924 8.75 10.0625 8.75L10.0982 8.74999C10.2716 8.74985 10.4856 8.74969 10.6705 8.77704ZM10.5 6.125C10.0167 6.125 9.625 6.51676 9.625 7C9.625 7.48325 10.0167 7.875 10.5 7.875C10.9833 7.875 11.3751 7.48325 11.3751 7C11.3751 6.51676 10.9833 6.125 10.5 6.125Z"
         fill={color}
-      />
-      <Path
-        d="M12 11V17"
-        stroke="white"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <Path
-        d="M12 7V7.5"
-        stroke="white"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
       />
     </Svg>
   );

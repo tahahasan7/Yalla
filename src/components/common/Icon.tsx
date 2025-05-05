@@ -8,6 +8,7 @@ import Flowing from "../../assets/icons/flowing.js";
 import FolderLibrary from "../../assets/icons/folder-library-stroke-rounded.js";
 import Glowing from "../../assets/icons/glowing.js";
 import GridView from "../../assets/icons/grid-view-bulk-rounded.js";
+import HalfGrid from "../../assets/icons/half-grid.js";
 import Information from "../../assets/icons/information-circle-solid-standard.js";
 import Kindling from "../../assets/icons/kindling.js";
 import LoveKorean from "../../assets/icons/love-korean-finger.js";
@@ -32,6 +33,7 @@ const IconComponents: Record<string, React.ComponentType<CustomIconProps>> = {
   FolderLibrary,
   Glowing,
   GridView,
+  HalfGrid,
   Information,
   Kindling,
   LoveKorean,

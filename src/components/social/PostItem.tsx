@@ -293,7 +293,10 @@ const PostItem = ({
             <View style={styles.likeContainer}>
               {/* Enhanced Music Player with Cover Heartbeat Animation */}
               <View style={styles.musicContainer}>
-                <TouchableOpacity onPress={handleOpenMusicBottomSheet}>
+                <TouchableOpacity
+                  onPress={handleOpenMusicBottomSheet}
+                  hitSlop={10}
+                >
                   <Animated.Image
                     source={{ uri: item.song.coverUrl }}
                     style={[
@@ -311,6 +314,7 @@ const PostItem = ({
                 style={[styles.likeButton, isLiked && styles.likeButtonActive]}
                 onPress={() => handleLike(item.id)}
                 activeOpacity={0.7}
+                hitSlop={10}
               >
                 <Animated.View
                   style={{
@@ -336,6 +340,7 @@ const PostItem = ({
                 onPress={() => {
                   // Placeholder for share action
                 }}
+                hitSlop={10}
               >
                 <Icon name="Surprise" color="white" size={24} />
               </TouchableOpacity>
