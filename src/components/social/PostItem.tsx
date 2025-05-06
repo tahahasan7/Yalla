@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
+import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -231,10 +232,19 @@ const PostItem = ({
             <View style={styles.postSummary}>
               <View style={styles.userInfoContainer}>
                 <View style={styles.userLeftSection}>
-                  <Image
-                    source={{ uri: item.user.profilePic }}
-                    style={styles.userProfilePic}
-                  />
+                  <TouchableOpacity
+                    onPress={() =>
+                      router.push({
+                        pathname: "/profile",
+                        params: { userId: item.id },
+                      })
+                    }
+                  >
+                    <Image
+                      source={{ uri: item.user.profilePic }}
+                      style={styles.userProfilePic}
+                    />
+                  </TouchableOpacity>
                   <View style={styles.userInfo}>
                     <View style={styles.usernameContainer}>
                       <Text style={styles.username}>{item.user.name}</Text>

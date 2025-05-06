@@ -22,6 +22,7 @@ import { NAVBAR_HEIGHT, POSTS } from "../../constants/socialData";
 import { DarkTheme, DefaultTheme } from "../../constants/theme";
 import { useColorScheme } from "../../hooks/useColorScheme";
 // Import the tab press context hook
+import { useRouter } from "expo-router";
 import { useTabPress } from "./_layout";
 
 const { width } = Dimensions.get("window");
@@ -199,6 +200,9 @@ export default function SocialScreen() {
   // Use the TabPress context to listen for scroll-to-top events
   const { lastPressedTab, shouldScrollToTop, setShouldScrollToTop } =
     useTabPress();
+
+  // Use the router for navigation
+  const router = useRouter();
 
   // Effect to handle scroll to top when tab is pressed
   useEffect(() => {
@@ -679,7 +683,7 @@ export default function SocialScreen() {
         ]}
       >
         {/* Left - User Profile Pic */}
-        <TouchableOpacity>
+        <TouchableOpacity onPress={() => router.push("/profile")}>
           <View
             style={{
               padding: 4,

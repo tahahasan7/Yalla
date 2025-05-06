@@ -98,6 +98,18 @@ export default function RootLayout() {
             } as NativeStackNavigationOptions;
           }}
         />
+
+        {/* Profile screen */}
+        <Stack.Screen
+          name="profile"
+          options={{
+            headerShown: false,
+            presentation: "card",
+            animation: "slide_from_right",
+            gestureEnabled: true,
+            gestureDirection: "horizontal",
+          }}
+        />
       </Stack>
     </ThemeProvider>
   );
