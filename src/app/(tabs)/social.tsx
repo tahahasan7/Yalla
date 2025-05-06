@@ -1,6 +1,6 @@
 import { Icon } from "@/components/common";
 import * as Haptics from "expo-haptics";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
@@ -21,6 +21,8 @@ import PostItem from "../../components/social/PostItem";
 import { NAVBAR_HEIGHT, POSTS } from "../../constants/socialData";
 import { DarkTheme, DefaultTheme } from "../../constants/theme";
 import { useColorScheme } from "../../hooks/useColorScheme";
+// Import the tab press context hook
+import { useTabPress } from "./_layout";
 
 const { width } = Dimensions.get("window");
 
@@ -144,6 +146,7 @@ export default function SocialScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollY = useRef(new Animated.Value(0)).current;
   const isScrolling = useRef(false);
+  const scrollTimeoutRef = useRef<number | undefined>(undefined);
   const [likedPosts, setLikedPosts] = useState<Record<string, boolean>>({});
   const [showParticles, setShowParticles] = useState<Record<string, boolean>>(
     {}
@@ -152,6 +155,10 @@ export default function SocialScreen() {
   const [viewedStories, setViewedStories] = useState<Record<string, boolean>>(
     {}
   );
+
+  // New state for tracking scroll operation state
+  const [scrollState, setScrollState] = useState("idle"); // 'idle', 'scrolling', 'animating'
+  const [touchDisabled, setTouchDisabled] = useState(false);
 
   // Animation refs
   const headerAnimation = useRef(new Animated.Value(1)).current;
@@ -189,6 +196,58 @@ export default function SocialScreen() {
     POST_PEEK_AMOUNT +
     NAVBAR_ADJUSTMENT;
 
+  // Use the TabPress context to listen for scroll-to-top events
+  const { lastPressedTab, shouldScrollToTop, setShouldScrollToTop } =
+    useTabPress();
+
+  // Effect to handle scroll to top when tab is pressed
+  useEffect(() => {
+    if (
+      lastPressedTab === "social" &&
+      shouldScrollToTop &&
+      flatListRef.current
+    ) {
+      // 1. Clear any existing scroll-related timeouts from other scroll actions
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+        scrollTimeoutRef.current = undefined;
+      }
+
+      // 2. Indicate that a programmatic scroll to top is happening.
+      isScrolling.current = true;
+      setScrollState("animating");
+      setTouchDisabled(true); // Disable user interactions during auto-scroll
+
+      // 3. Scroll to the top
+      flatListRef.current.scrollToOffset({ offset: 0, animated: true });
+
+      // 4. Update current index immediately
+      setCurrentIndex(0);
+
+      // 5. Add haptic feedback
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+
+      // 6. Reset scrolling flags when the auto-scroll momentum ends
+      const scrollToTopAnimationDuration = 500; // ms, a safe estimate
+      scrollTimeoutRef.current = setTimeout(() => {
+        isScrolling.current = false;
+        setScrollState("idle");
+        setTouchDisabled(false); // Re-enable user interactions
+        setShouldScrollToTop(false); // Reset the trigger
+      }, scrollToTopAnimationDuration);
+    }
+  }, [lastPressedTab, shouldScrollToTop, setShouldScrollToTop]);
+
+  // Clean up timeouts when component unmounts
+  useEffect(() => {
+    return () => {
+      // Clean up any pending timers
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, []);
+
   // Handle pull-to-refresh
   const handlePullToRefresh = (offset: number) => {
     // Update pull distance (for visual feedback)
@@ -203,9 +262,8 @@ export default function SocialScreen() {
 
       // Only mark as ready for refresh when fully pulled
       if (pullPercentage >= 1) {
-        // Mark that we're ready to refresh when released
+        // Only provide haptic feedback once when threshold is crossed
         if (lastRotationValue.current === 0) {
-          // Only provide haptic feedback once when threshold is crossed
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           lastRotationValue.current = 1;
         }
@@ -336,12 +394,11 @@ export default function SocialScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
+  // Improved scroll end drag handler with better refresh detection
   const handleScrollEndDrag = (
     event: NativeSyntheticEvent<NativeScrollEvent>
   ): void => {
-    // If we're preventing scrolling, don't handle this
-    if (isScrolling.current) return;
-
+    // Get the current offset
     const offsetY = event.nativeEvent.contentOffset.y;
     const maxScrollPosition = (POSTS.length - 1) * itemHeight;
 
@@ -424,21 +481,50 @@ export default function SocialScreen() {
 
     // If scroll reaches at least the minimum threshold, snap to corresponding post
     if (Math.abs(offsetY - newIndex * itemHeight) < threshold) {
-      if (newIndex >= 0 && newIndex < POSTS.length) {
+      if (
+        newIndex >= 0 &&
+        newIndex < POSTS.length &&
+        newIndex !== currentIndex
+      ) {
+        // Set flags to prevent interference from other scroll events
+        isScrolling.current = true;
+        setScrollState("scrolling");
+
+        // Clear any existing timeout
+        if (scrollTimeoutRef.current) {
+          clearTimeout(scrollTimeoutRef.current);
+        }
+
+        // Set new current index
+        setCurrentIndex(newIndex);
+
+        // Scroll with animation
         flatListRef.current?.scrollToIndex({
           index: newIndex,
           animated: true,
         });
+
+        // Reset scrolling flag after animation completes
+        scrollTimeoutRef.current = setTimeout(() => {
+          isScrolling.current = false;
+          setScrollState("idle");
+        }, 400); // Increased from 300ms for extra safety
       }
     }
   };
 
+  // Improved momentum scroll end handler with animation cancellation support
   const handleMomentumScrollEnd = (
     event: NativeSyntheticEvent<NativeScrollEvent>
   ): void => {
-    // Skip if we're preventing scrolling
-    if (isScrolling.current) return;
-
+    // Cleanup after programmatic scroll-to-top
+    if (scrollState === "animating") {
+      isScrolling.current = false;
+      setScrollState("idle");
+      setTouchDisabled(false);
+      setShouldScrollToTop(false);
+      return;
+    }
     const offsetY = event.nativeEvent.contentOffset.y;
 
     // Calculate new index with bounds checking
@@ -450,9 +536,14 @@ export default function SocialScreen() {
 
     // Ensure we're within valid bounds for the posts array
     if (newIndex >= 0 && newIndex < POSTS.length && newIndex !== currentIndex) {
+      // Set flag to prevent scroll events from interfering
+      isScrolling.current = true;
+      setScrollState("scrolling");
+
+      // Update current index
       setCurrentIndex(newIndex);
 
-      // Ensure we're fully scrolled to the selected item
+      // Scroll to ensure perfect alignment
       flatListRef.current?.scrollToIndex({
         index: newIndex,
         animated: true,
@@ -460,13 +551,24 @@ export default function SocialScreen() {
 
       // Haptic feedback when changing posts
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
 
-    // Make sure flag is reset
-    isScrolling.current = false;
+      // Reset scrolling flag after animation completes
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+
+      scrollTimeoutRef.current = setTimeout(() => {
+        isScrolling.current = false;
+        setScrollState("idle");
+      }, 400); // Increased from 300ms
+    } else {
+      // Make sure flags are reset even if index didn't change
+      isScrolling.current = false;
+      setScrollState("idle");
+    }
   };
 
-  // Modified to handle pull-to-refresh
+  // Improved scroll event handler with better pull-to-refresh logic
   const handleScroll = Animated.event(
     [{ nativeEvent: { contentOffset: { y: scrollY } } }],
     {
@@ -490,7 +592,7 @@ export default function SocialScreen() {
         }
 
         // Only update the index when we're not in a programmatic scroll
-        if (!isScrolling.current) {
+        if (!isScrolling.current && scrollState === "idle") {
           // Calculate new index with a bias toward the direction of scroll to make it more responsive
           const velocity = event.nativeEvent.velocity?.y || 0;
           const direction = Math.sign(velocity);
@@ -509,10 +611,16 @@ export default function SocialScreen() {
           newIndex = Math.max(0, Math.min(newIndex, POSTS.length - 1));
 
           if (newIndex !== currentIndex) {
-            // Add a small delay to prevent rapid state changes causing flicker
-            setTimeout(() => {
-              setCurrentIndex(newIndex);
-            }, 10);
+            // Use a debounce pattern to prevent rapid state changes causing flicker
+            if (scrollTimeoutRef.current) {
+              clearTimeout(scrollTimeoutRef.current);
+            }
+
+            scrollTimeoutRef.current = setTimeout(() => {
+              if (!isScrolling.current && scrollState === "idle") {
+                setCurrentIndex(newIndex);
+              }
+            }, 20); // Small delay for debouncing
           }
         }
       },
@@ -700,6 +808,7 @@ export default function SocialScreen() {
           onScroll={handleScroll}
           onScrollEndDrag={handleScrollEndDrag}
           onMomentumScrollEnd={handleMomentumScrollEnd}
+          scrollEnabled={!touchDisabled}
           contentContainerStyle={{
             paddingBottom: POST_PEEK_AMOUNT, // Add bottom padding to account for peeking
           }}

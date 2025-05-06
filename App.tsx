@@ -1,18 +1,14 @@
-import React, { useState, useEffect } from "react";
-import { NavigationContainer } from "@react-navigation/native";
-import { createStackNavigator } from "@react-navigation/stack";
-import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import { Ionicons } from "@expo/vector-icons";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import { NavigationContainer } from "@react-navigation/native";
 import * as Font from "expo-font";
-import { View, ActivityIndicator } from "react-native";
+import React, { useEffect, useState } from "react";
+import { ActivityIndicator, Platform, View } from "react-native";
 
 import CameraScreen from "./src/app/(tabs)/camera";
+import GoalsScreen from "./src/app/(tabs)/goals";
 import SocialScreen from "./src/app/(tabs)/social";
-import GoalsScreen from "./src/app/(tabs)/goals
 
-
-
-const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
 const App = () => {
@@ -55,7 +51,7 @@ const App = () => {
       <Tab.Navigator
         screenOptions={({ route }) => ({
           tabBarIcon: ({ focused, color, size }) => {
-            let iconName;
+            let iconName: any;
 
             if (route.name === "Home") {
               iconName = focused ? "ios-home" : "ios-home-outline";
@@ -67,11 +63,18 @@ const App = () => {
 
             return <Ionicons name={iconName} size={size} color={color} />;
           },
+          tabBarStyle:
+            Platform.OS === "ios"
+              ? {
+                  backgroundColor: "transparent",
+                  position: "absolute",
+                  borderTopWidth: 0,
+                  elevation: 0,
+                }
+              : {},
+          tabBarActiveTintColor: "tomato",
+          tabBarInactiveTintColor: "gray",
         })}
-        tabBarOptions={{
-          activeTintColor: "tomato",
-          inactiveTintColor: "gray",
-        }}
       >
         <Tab.Screen name="Home" component={CameraScreen} />
         <Tab.Screen name="Profile" component={SocialScreen} />

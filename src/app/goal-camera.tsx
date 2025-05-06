@@ -12,7 +12,7 @@ import {
 } from "expo-camera";
 import * as Haptics from "expo-haptics";
 import * as MediaLibrary from "expo-media-library";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -20,7 +20,6 @@ import {
   Dimensions,
   Easing,
   FlatList,
-  Platform,
   StatusBar,
   StyleSheet,
   Text,
@@ -28,14 +27,13 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { NAVBAR_HEIGHT } from "../../constants/socialData";
-import { DarkTheme, DefaultTheme } from "../../constants/theme";
-import { useColorScheme } from "../../hooks/useColorScheme";
+import { DarkTheme, DefaultTheme } from "../constants/theme";
+import { useColorScheme } from "../hooks/useColorScheme";
 
 // Get screen dimensions for responsive layout
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
-// Import Goal interface from goals.tsx
+// Import Goal interface
 interface Goal {
   id: string;
   title: string;
@@ -186,8 +184,8 @@ export default function GoalCameraScreen() {
   const goalSelectorAnim = useRef(new Animated.Value(0)).current;
   const goalSelectorHeight = useRef(new Animated.Value(0)).current;
 
-  // Add state for the back button visibility
-  const [showBackButton, setShowBackButton] = useState(false); // Changed to false to hide back button
+  // Always show back button in goal-camera
+  const [showBackButton, setShowBackButton] = useState(true);
 
   // Camera and gallery permissions
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
@@ -265,184 +263,197 @@ export default function GoalCameraScreen() {
     setTorchOn(!torchOn);
   };
 
-  // Handle back button press - navigate back to goal details
-  const handleBackPress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    if (params.fromGoalDetail === "true" && params.goalId) {
-      // Navigate back to goal-details with proper parameters
-      router.push({
-        pathname: "/goal-details",
-        params: {
-          id: params.goalId,
-          title: params.goalTitle,
-          color: params.goalColor,
-          icon: params.goalIcon,
-          flowState: params.goalFlowState,
-          frequency: params.goalFrequency,
-          duration: params.goalDuration,
-          progress: params.goalProgress,
-          animation: "slide_from_left", // This makes it slide from left (back animation)
-        },
-      });
-    } else {
-      // If not from goal details, just use standard back
-      navigation.goBack();
-    }
+  // Toggle night mode
+  const toggleNightMode = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setNightMode(!nightMode);
   };
 
-  // Pick image from gallery
-  const pickImage = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  // Handle back button press - return to the goal details screen
+  const handleBackPress = () => {
+    // Navigate back to the goal details page
+    router.back();
+  };
 
-    // Check if we have permission to access the media library
+  // Request permissions when the component mounts
+  useEffect(() => {
+    const requestPermissions = async () => {
+      await requestCameraPermission();
+      await requestGalleryPermission();
+    };
+
+    requestPermissions();
+  }, []);
+
+  // Pick an image from the gallery
+  const pickImage = async () => {
     if (!galleryPermission?.granted) {
-      const permission = await requestGalleryPermission();
-      if (!permission.granted) {
-        return;
-      }
+      await requestGalleryPermission();
+      return;
     }
 
-    // Logic for picking image from gallery would go here
-    // This is a placeholder for implementation
-    console.log("Open gallery to pick image");
+    try {
+      const result = await MediaLibrary.getAssetsAsync({
+        mediaType: ["photo"],
+        first: 10,
+        sortBy: ["creationTime"],
+      });
+
+      if (result.assets && result.assets.length > 0) {
+        const mostRecentImage = result.assets[0];
+        setCapturedImage(mostRecentImage.uri);
+      }
+    } catch (error) {
+      console.error("Error picking image from gallery:", error);
+    }
   };
 
   // Take a photo
   const takePhoto = async () => {
-    if (!cameraRef.current || processing) return;
-
-    // Prevent taking photo if no goal is selected
-    if (!selectedGoal) {
-      // Show the goal selector if no goal is selected
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      toggleGoalSelector();
+    // Check for camera permissions
+    if (!cameraPermission?.granted) {
+      await requestCameraPermission();
       return;
     }
 
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    if (cameraRef.current && !processing) {
+      try {
+        // Animate the shutter button
+        Animated.sequence([
+          Animated.timing(captureAnimation, {
+            toValue: 0.85,
+            duration: 100,
+            useNativeDriver: true,
+          }),
+          Animated.timing(captureAnimation, {
+            toValue: 1,
+            duration: 100,
+            useNativeDriver: true,
+          }),
+        ]).start();
 
-    try {
-      setProcessing(true);
+        // Give haptic feedback for camera capture
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
-      // Animate capture button
-      Animated.sequence([
-        Animated.timing(captureAnimation, {
-          toValue: 0.8,
-          duration: 100,
+        // Set processing state to show loader
+        setProcessing(true);
+
+        // Simulate a freeze frame effect
+        setFreezeFrame(true);
+        Animated.timing(freezeFrameScale, {
+          toValue: 1.05,
+          duration: 300,
+          easing: Easing.out(Easing.ease),
           useNativeDriver: true,
-        }),
-        Animated.timing(captureAnimation, {
-          toValue: 1,
-          duration: 100,
-          useNativeDriver: true,
-        }),
-      ]).start();
+        }).start();
 
-      // Freeze frame effect
-      setFreezeFrame(true);
-      Animated.timing(freezeFrameScale, {
-        toValue: 1.03,
-        duration: 200,
-        useNativeDriver: true,
-      }).start(() => {
-        setTimeout(() => {
+        // Show a fade animation
+        Animated.sequence([
+          Animated.timing(fadeAnim, {
+            toValue: 0.7,
+            duration: 100,
+            useNativeDriver: true,
+          }),
+          Animated.timing(fadeAnim, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+        ]).start();
+
+        // Capture the photo
+        setTimeout(async () => {
+          const photo = await cameraRef.current.takePictureAsync({
+            quality: 0.9,
+            skipProcessing: false,
+          });
+
+          // Set the captured image and reset processing state
+          setCapturedImage(photo.uri);
+          setProcessing(false);
           setFreezeFrame(false);
-          freezeFrameScale.setValue(1);
-        }, 300);
-      });
-
-      // Logic for taking photo would go here
-      // This is a placeholder for implementation
-      console.log("Taking photo");
-
-      setTimeout(() => {
+        }, 600);
+      } catch (error) {
+        console.error("Error taking photo:", error);
         setProcessing(false);
-      }, 500);
-    } catch (error) {
-      console.error("Error taking photo:", error);
-      setProcessing(false);
+        setFreezeFrame(false);
+      }
     }
   };
 
   // Toggle camera facing
   const toggleCameraFacing = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    // Animate screen transition
-    Animated.timing(fadeAnim, {
-      toValue: 0,
-      duration: 100,
-      useNativeDriver: true,
-    }).start(() => {
-      setFacing(facing === "front" ? "back" : "front");
-
-      // If switching to front camera, always turn off torch
-      if (facing === "back") {
-        setTorchOn(false);
-      }
-
-      // Animate back in
+    // Camera flip animation
+    Animated.sequence([
+      Animated.timing(fadeAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }),
       Animated.timing(fadeAnim, {
         toValue: 1,
-        duration: 200,
+        duration: 150,
         useNativeDriver: true,
-      }).start();
-    });
+      }),
+    ]).start();
+
+    // Toggle between front and back camera
+    setFacing(facing === "back" ? "front" : "back");
+
+    // Reset torch when switching to front camera (as most front cameras don't have torch)
+    if (facing === "back") {
+      setTorchOn(false);
+    }
   };
 
-  // Updated function to toggle goal selector with fixed animations
+  // Toggle goal selector
   function toggleGoalSelector() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
-    // Hide music selector if open
-    if (showMusicSelector) {
-      setShowMusicSelector(false);
-      musicDropdownAnim.setValue(0);
-    }
-
-    // Toggle state first
-    setShowGoalSelector(!showGoalSelector);
-
-    // Use separate animations - one for opacity/translate (native) and one for height (non-native)
-    if (!showGoalSelector) {
-      // Opening animation
-      Animated.timing(goalSelectorAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.cubic),
-      }).start();
+    // If goal selector is currently visible, hide it
+    if (showGoalSelector) {
+      Animated.parallel([
+        Animated.timing(goalSelectorAnim, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }),
+        Animated.timing(goalSelectorHeight, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: false,
+        }),
+      ]).start(() => {
+        setShowGoalSelector(false);
+      });
     } else {
-      // Closing animation
-      Animated.timing(goalSelectorAnim, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.cubic),
-      }).start();
+      // Show goal selector
+      setShowGoalSelector(true);
+      Animated.parallel([
+        Animated.timing(goalSelectorAnim, {
+          toValue: 1,
+          duration: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(goalSelectorHeight, {
+          toValue: 280, // Set to the height of your goal selector
+          duration: 300,
+          useNativeDriver: false,
+        }),
+      ]).start();
     }
   }
 
-  // Function to select a goal with haptic feedback and animation
+  // Select a goal
   function selectGoal(goal: Goal) {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSelectedGoal(goal);
-
-    // Play success haptic feedback
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-    // Close selector with animation
-    Animated.timing(goalSelectorAnim, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: true,
-      easing: Easing.out(Easing.cubic),
-    }).start(() => {
-      setShowGoalSelector(false);
-    });
+    toggleGoalSelector();
   }
 
-  // Add permission gating logic: only render camera when permission is granted
+  // If camera permission is not granted, show permission request UI
   if (!cameraPermission?.granted) {
     return (
       <View
@@ -454,7 +465,7 @@ export default function GoalCameraScreen() {
         <Text
           style={{ color: theme.colors.text, textAlign: "center", margin: 16 }}
         >
-          Camera access is required to use this screen.
+          Camera access is required to proceed.
         </Text>
         <TouchableOpacity
           onPress={requestCameraPermission}
@@ -468,9 +479,17 @@ export default function GoalCameraScreen() {
     );
   }
 
-  // Camera View with the improved goal selector
   return (
     <View style={styles.container}>
+      <Stack.Screen
+        options={{
+          headerShown: false,
+          contentStyle: {
+            backgroundColor: "transparent",
+          },
+        }}
+      />
+
       <StatusBar
         translucent
         backgroundColor="transparent"
@@ -478,27 +497,14 @@ export default function GoalCameraScreen() {
         hidden={false}
       />
 
-      {/* Background that extends behind the navbar */}
-      <View
-        style={{
-          position: "absolute",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: NAVBAR_HEIGHT,
-          backgroundColor: "#000",
-          zIndex: 1,
-        }}
-      />
-
-      {/* Camera View - Position between status bar and navbar */}
+      {/* Camera View - Position from status bar to bottom */}
       <View
         style={{
           position: "absolute",
           top: insets.top,
           left: 0,
           right: 0,
-          bottom: NAVBAR_HEIGHT,
+          bottom: 0,
           zIndex: 5,
         }}
       >
@@ -521,12 +527,20 @@ export default function GoalCameraScreen() {
             enableTorch={torchOn}
             ref={cameraRef}
           />
-          {/* Overlay controls */}
+          {/* Overlay controls rendered on top of the camera */}
           <View style={styles.overlayContainer}>
             {/* Top controls */}
             <View style={[styles.topControls, { marginTop: 10 }]}>
-              <View style={styles.topLeftControls}>
-                {/* Back button - removed */}
+              <View style={styles.leftControls}>
+                {/* Back button - always shown in goal-camera */}
+                {showBackButton && (
+                  <TouchableOpacity
+                    style={styles.backButton}
+                    onPress={handleBackPress}
+                  >
+                    <Ionicons name="chevron-back" size={28} color="white" />
+                  </TouchableOpacity>
+                )}
 
                 {/* Improved Goal Selector Button */}
                 <TouchableOpacity
@@ -541,7 +555,7 @@ export default function GoalCameraScreen() {
                 >
                   {selectedGoal ? (
                     <React.Fragment>
-                      <View style={styles.selectedGoalIcon}>
+                      <View style={styles.selectedIndicator}>
                         {selectedGoal.icon === "WorkoutRun" ? (
                           <MaterialIcons
                             name="directions-run"
@@ -588,7 +602,12 @@ export default function GoalCameraScreen() {
                 </TouchableOpacity>
               </View>
 
-              <View style={styles.topRightControls}>
+              <View
+                style={{
+                  flexDirection: "column",
+                  gap: 12,
+                }}
+              >
                 <TouchableOpacity
                   style={styles.controlButton}
                   onPress={toggleFlash}
@@ -604,7 +623,9 @@ export default function GoalCameraScreen() {
                   <TouchableOpacity
                     style={[
                       styles.controlButton,
-                      torchOn ? styles.activeButton : null,
+                      torchOn
+                        ? { backgroundColor: "rgba(255, 255, 255, 0.3)" }
+                        : null,
                     ]}
                     onPress={toggleTorch}
                   >
@@ -666,13 +687,25 @@ export default function GoalCameraScreen() {
                   )}
                   showsVerticalScrollIndicator={false}
                   style={styles.goalList}
-                  contentContainerStyle={styles.goalListContent}
+                  contentContainerStyle={{
+                    paddingHorizontal: 16,
+                    paddingBottom: 20,
+                  }}
                 />
               </Animated.View>
             )}
 
             {/* Night mode overlay */}
-            {nightMode && <View style={styles.nightModeOverlay} />}
+            {nightMode && (
+              <View
+                style={{
+                  ...StyleSheet.absoluteFillObject,
+                  backgroundColor: "rgba(0, 0, 100, 0.15)",
+                  zIndex: 1,
+                  pointerEvents: "none",
+                }}
+              />
+            )}
 
             {/* Bottom controls */}
             <View style={styles.buttonContainer}>
@@ -745,10 +778,6 @@ const styles = StyleSheet.create({
     flex: 1,
     overflow: "hidden",
   },
-  overlayContainer: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 1,
-  },
   camera: {
     flex: 1,
   },
@@ -759,14 +788,19 @@ const styles = StyleSheet.create({
     padding: 16,
     paddingTop: 20,
   },
-  topLeftControls: {
+  leftControls: {
     flex: 1,
     flexDirection: "row",
     alignItems: "center",
   },
-  topRightControls: {
-    flexDirection: "column",
-    gap: 12,
+  backButton: {
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
   },
   controlButton: {
     padding: 10,
@@ -776,15 +810,6 @@ const styles = StyleSheet.create({
     height: 44,
     justifyContent: "center",
     alignItems: "center",
-  },
-  activeButton: {
-    backgroundColor: "rgba(255, 255, 255, 0.3)",
-  },
-  nightModeOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(0, 0, 100, 0.15)",
-    zIndex: 1,
-    pointerEvents: "none",
   },
   buttonContainer: {
     position: "absolute",
@@ -853,9 +878,6 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginHorizontal: 8,
   },
-  selectedGoalIcon: {
-    marginRight: 8,
-  },
   selectedGoalText: {
     color: "#fff",
     fontSize: 14,
@@ -917,10 +939,6 @@ const styles = StyleSheet.create({
   goalList: {
     marginBottom: 20,
   },
-  goalListContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 20,
-  },
   goalItem: {
     flexDirection: "row",
     alignItems: "center",
@@ -971,297 +989,36 @@ const styles = StyleSheet.create({
     marginLeft: 4,
   },
   selectedIndicator: {
-    marginLeft: 6,
+    marginRight: 8,
   },
-
-  // Other existing styles
+  goalSelectionToast: {
+    position: "absolute",
+    bottom: 100,
+    alignSelf: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.8)",
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderRadius: 20,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  goalSelectionToastText: {
+    color: "#fff",
+    marginLeft: 8,
+    fontSize: 14,
+  },
   permissionButton: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
   },
-  previewContainer: {
-    flex: 1,
-    backgroundColor: "black",
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 9999,
-  },
-  previewImage: {
-    flex: 1,
-    resizeMode: "cover",
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
-  },
-  previewOverlay: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    top: 0,
-    padding: 0,
-    justifyContent: "space-between",
-    backgroundColor: "rgba(0,0,0,0.1)",
-  },
-  previewTopBar: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === "ios" ? 50 : 30,
-  },
-  previewCloseButton: {
-    backgroundColor: "rgba(0, 0, 0, 0.4)",
-    borderRadius: 20,
-    width: 40,
-    height: 40,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  musicSelectorArea: {
-    alignItems: "center",
-    paddingTop: Platform.OS === "ios" ? 50 : 40,
-    paddingBottom: 10,
-  },
-  musicButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginBottom: 4,
-  },
-  musicButtonText: {
-    color: "white",
-    fontSize: 14,
-    fontWeight: "500",
-    marginHorizontal: 8,
-  },
-  musicDropdown: {
-    backgroundColor: "rgba(0, 0, 0, 0.90)",
-    borderRadius: 16,
-    padding: 16,
-    width: "90%",
-    maxWidth: 400,
-    maxHeight: 400,
-  },
-  musicDropdownTitle: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "600",
-    marginBottom: 12,
-    textAlign: "center",
-  },
-  musicSearchContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-  },
-  musicSearchInput: {
-    color: "white",
-    fontSize: 14,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    flex: 1,
-  },
-  musicCategoryTabs: {
-    flexDirection: "row",
-    marginBottom: 12,
-  },
-  musicCategoryTab: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: "center",
-  },
-  musicCategoryTabActive: {
-    borderBottomWidth: 2,
-    borderBottomColor: "#0E96FF",
-  },
-  musicCategoryTabText: {
-    color: "white",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  musicOptionsList: {
-    maxHeight: 250,
-  },
-  musicOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-  },
-  musicOptionIconWrapper: {
-    width: 36,
-    height: 36,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  selectedMusicOption: {
-    backgroundColor: "rgba(14, 150, 255, 0.15)",
-  },
-  musicTextContainer: {
-    flex: 1,
-    marginLeft: 10,
-  },
-  musicTitle: {
-    color: "white",
-    fontSize: 15,
-    fontWeight: "500",
-  },
-  musicArtist: {
-    color: "rgba(255, 255, 255, 0.7)",
-    fontSize: 12,
-  },
-  musicDuration: {
-    color: "rgba(255, 255, 255, 0.5)",
-    fontSize: 12,
-    marginRight: 8,
-  },
-  selectedMusicBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    borderRadius: 30,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginHorizontal: 20,
-    marginBottom: 20,
-  },
-  selectedMusicInfo: {
-    flex: 1,
-    marginLeft: 10,
-  },
-  selectedMusicTitle: {
-    color: "white",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  selectedMusicArtist: {
-    color: "rgba(255, 255, 255, 0.7)",
-    fontSize: 12,
-  },
-  selectedMusicRemove: {
-    padding: 4,
-  },
-  captionContainer: {
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
-    borderRadius: 20,
-    padding: 12,
-    marginHorizontal: 20,
-    marginBottom: 100,
-  },
-  captionInput: {
-    color: "white",
-    fontSize: 16,
-    minHeight: 40,
-  },
-  previewActions: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingBottom: Platform.OS === "ios" ? 34 : 20,
-    paddingTop: 10,
-    backgroundColor: "rgba(0,0,0,1)",
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    zIndex: 1000,
-  },
-  previewButton: {
-    padding: 8,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    borderRadius: 15,
-    width: 70,
-    height: 60,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  previewButtonText: {
-    color: "white",
-    fontSize: 11,
-    marginTop: 4,
-  },
-  previewPostButton: {
-    backgroundColor: "#0E96FF",
-    borderRadius: 20,
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    justifyContent: "center",
-    alignItems: "center",
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-    height: 45,
-  },
-  previewPostButtonText: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  saveToast: {
-    position: "absolute",
-    top: Platform.OS === "ios" ? 100 : 80,
-    alignSelf: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.85)",
-    borderRadius: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    flexDirection: "row",
-    alignItems: "center",
-    zIndex: 9999,
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-  },
-  saveToastText: {
-    color: "white",
-    fontSize: 15,
-    fontWeight: "600",
-    marginLeft: 8,
-    letterSpacing: 0.2,
-  },
-  goalSelectionToast: {
-    position: "absolute",
-    top: Platform.OS === "ios" ? 100 : 80,
-    alignSelf: "center",
-    backgroundColor: "rgba(255, 102, 0, 0.95)",
-    borderRadius: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    flexDirection: "row",
-    alignItems: "center",
-    zIndex: 9999,
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-  },
-  goalSelectionToastText: {
-    color: "white",
-    fontSize: 15,
-    fontWeight: "600",
-    marginLeft: 8,
-    letterSpacing: 0.2,
-  },
   permissionContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+  overlayContainer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
   },
 });

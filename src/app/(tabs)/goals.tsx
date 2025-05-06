@@ -145,6 +145,7 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onLongPress }) => {
     return goal.duration;
   };
 
+  // Inside GoalCard component in goals.tsx
   const handleGoalPress = () => {
     // Navigate to the goal details screen with the goal data
     router.push({
@@ -165,7 +166,6 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onLongPress }) => {
       },
     });
   };
-
   const handleLongPress = () => {
     // Trigger haptic feedback
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -219,7 +219,7 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onLongPress }) => {
         <View
           style={[
             styles.goalCard,
-            { backgroundColor: "#131313" },
+            { backgroundColor: "#1F1F1F" },
             goal.completed && styles.completedGoalCard,
           ]}
         >
@@ -528,8 +528,8 @@ const styles = StyleSheet.create({
   },
   quoteButtonText: {
     color: "white",
-    fontFamily: FontFamily.Medium,
-    fontSize: 12,
+    fontFamily: FontFamily.SemiBold,
+    fontSize: 14,
   },
   addButton: {
     width: 36,
@@ -721,7 +721,7 @@ const styles = StyleSheet.create({
   completedText: {
     color: "white",
     fontSize: 12,
-    fontFamily: FontFamily.SemiBold,
+    fontFamily: FontFamily.Regular,
   },
 
   completedDate: {

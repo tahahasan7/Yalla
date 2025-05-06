@@ -1,6 +1,13 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
-import { Stack } from "expo-router";
+import {
+  DarkTheme,
+  DefaultTheme,
+  useNavigation,
+} from "@react-navigation/native";
+import * as FileSystem from "expo-file-system";
+import { LinearGradient } from "expo-linear-gradient";
+import * as MediaLibrary from "expo-media-library";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -19,16 +26,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon } from "../components/common";
 import { FontFamily } from "../constants/fonts";
-import { DarkTheme, DefaultTheme } from "../constants/theme";
 import { useColorScheme } from "../hooks/useColorScheme";
-
-// Note: To enable image download functionality, install these packages:
-// 1. expo install expo-file-system
-// 2. expo install expo-media-library
-//
-// Then uncomment these imports:
-// import * as FileSystem from 'expo-file-system';
-// import * as MediaLibrary from 'expo-media-library';
 
 // Custom flow state icon without background
 const FlowStateIconNoBackground = ({
@@ -51,13 +49,8 @@ const FlowStateIconNoBackground = ({
 
 export default function GoalDetailsScreen() {
   const navigation = useNavigation();
-  const params = {
-    id: "1",
-    title: "Running",
-    color: "#0E96FF",
-    icon: "run",
-    flowState: "flowing", // Example flow state
-  };
+  const router = useRouter();
+  const params = useLocalSearchParams();
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const theme = colorScheme === "dark" ? DarkTheme : DefaultTheme;
@@ -90,7 +83,7 @@ export default function GoalDetailsScreen() {
     contentOpacity: useRef(new Animated.Value(0)).current,
   };
 
-  const dayRefs = useRef<{ [key: string]: any }>({}).current;
+  const dayRefs = useRef<{ [key: string]: View | null }>({}).current;
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } =
     Dimensions.get("window");
 
@@ -113,11 +106,74 @@ export default function GoalDetailsScreen() {
     color: params.color as string,
     icon: params.icon as string,
     flowState: params.flowState as "still" | "kindling" | "flowing" | "glowing",
+    frequency: params.frequency as string,
+    duration: params.duration as string,
+    lastImage: params.lastImage as string | undefined,
+    lastImageDate: params.lastImageDate as string | undefined,
+    progress: params.progress ? parseInt(params.progress as string) : undefined,
+    completed: params.completed === "true",
+    completedDate: params.completedDate as string | undefined,
   };
 
   // Capitalize flow state for display
   const flowStateCapitalized =
     goal.flowState.charAt(0).toUpperCase() + goal.flowState.slice(1);
+
+  // Get appropriate images based on goal type
+  const getGoalSpecificImages = (goalTitle: string, goalIcon: string) => {
+    // Default set of images
+    let images = [
+      "https://i.pinimg.com/736x/9a/d8/3e/9ad83e2c54d9164b4e2753529cddfa05.jpg",
+      "https://i.pinimg.com/736x/ac/b3/dd/acb3dde1977ab624f553afa69254d658.jpg",
+      "https://i.pinimg.com/736x/b5/cf/ef/b5cfef1fd703873309b833c6f540321f.jpg",
+      "https://i.pinimg.com/736x/57/91/39/579139d694b61e9b9311ead88e2c9ba3.jpg",
+      "https://i.pinimg.com/736x/c8/40/7e/c8407e57e79ae1e88e800535f247f64c.jpg",
+    ];
+
+    // Choose specific images based on goal title or icon
+    const title = goalTitle.toLowerCase();
+    // Use the original images for running goals
+    if (title.includes("running") || goalIcon === "WorkoutRun") {
+      return images;
+    } else if (title.includes("study") || title.includes("studying")) {
+      return [
+        "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?q=80&w=1373&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?q=80&w=1470&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1588702547923-7093a6c3ba33?q=80&w=1470&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1456406644174-8ddd4cd52a06?q=80&w=1368&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1532012197267-da84d127e765?q=80&w=1374&auto=format&fit=crop",
+      ];
+    } else if (title.includes("meditation") || title.includes("yoga")) {
+      return [
+        "https://images.unsplash.com/photo-1506126613408-eca07ce68773?q=80&w=1498&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1545389336-cf090694435e?q=80&w=1374&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1532798442725-41036acc7489?q=80&w=1374&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1474418397713-7ede21d49118?q=80&w=1476&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?q=80&w=1638&auto=format&fit=crop",
+      ];
+    } else if (title.includes("read") || title.includes("reading")) {
+      return [
+        "https://images.unsplash.com/photo-1515592302748-6c5ea17e2f0e?q=80&w=1374&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1544947950-fa07a98d237f?q=80&w=1374&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1512820790803-83ca734da794?q=80&w=1374&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1510172951991-856a654063f9?q=80&w=1374&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1529148482759-b35b25c5f217?q=80&w=1470&auto=format&fit=crop",
+      ];
+    } else if (title.includes("guitar") || title.includes("music")) {
+      return [
+        "https://images.unsplash.com/photo-1543443258-92b04ad5ec6b?q=80&w=1470&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1605020420620-20c943cc4669?q=80&w=1470&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1510915361894-db8b60106cb1?q=80&w=1470&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1514649923863-ceaf75b7ec40?q=80&w=1470&auto=format&fit=crop",
+        "https://images.unsplash.com/photo-1511379938547-c1f69419868d?q=80&w=1470&auto=format&fit=crop",
+      ];
+    }
+
+    return images;
+  };
+
+  // Get images based on the current goal
+  const goalImages = getGoalSpecificImages(goal.title, goal.icon);
 
   // Mock timeline data - this would be fetched from your backend in a real app
   const timelineData = [
@@ -127,9 +183,8 @@ export default function GoalDetailsScreen() {
       day: "15",
       month: "November 2025",
       goalDay: 1, // First day of the goal
-      imageUrl:
-        "https://i.pinimg.com/736x/9a/d8/3e/9ad83e2c54d9164b4e2753529cddfa05.jpg",
-      caption: "First day of running - completed 2km!",
+      imageUrl: goalImages[0],
+      caption: `First day of ${goal.title} - started my journey!`,
     },
     {
       id: "2",
@@ -137,9 +192,8 @@ export default function GoalDetailsScreen() {
       day: "17",
       month: "November 2025",
       goalDay: 3, // Third day of the goal
-      imageUrl:
-        "https://i.pinimg.com/736x/ac/b3/dd/acb3dde1977ab624f553afa69254d658.jpg",
-      caption: "Pushed myself to 3km today. Legs are sore but feeling great!",
+      imageUrl: goalImages[1],
+      caption: `Day 3 of my ${goal.title} goal. Making progress!`,
     },
     {
       id: "3",
@@ -147,9 +201,8 @@ export default function GoalDetailsScreen() {
       day: "20",
       month: "November 2025",
       goalDay: 6, // Sixth day of the goal
-      imageUrl:
-        "https://i.pinimg.com/736x/b5/cf/ef/b5cfef1fd703873309b833c6f540321f.jpg",
-      caption: "Morning run with beautiful sunrise. 4km completed.",
+      imageUrl: goalImages[2],
+      caption: `Continuing with ${goal.title} - feeling good about it.`,
     },
     {
       id: "4",
@@ -157,9 +210,8 @@ export default function GoalDetailsScreen() {
       day: "05",
       month: "December 2025",
       goalDay: 21, // 21st day of the goal
-      imageUrl:
-        "https://i.pinimg.com/736x/57/91/39/579139d694b61e9b9311ead88e2c9ba3.jpg",
-      caption: "Trail running today - harder but more enjoyable!",
+      imageUrl: goalImages[3],
+      caption: `${goal.title} is becoming a habit now. Great progress!`,
     },
     {
       id: "5",
@@ -167,9 +219,8 @@ export default function GoalDetailsScreen() {
       day: "15",
       month: "December 2025",
       goalDay: 31, // 31st day of the goal
-      imageUrl:
-        "https://i.pinimg.com/736x/c8/40/7e/c8407e57e79ae1e88e800535f247f64c.jpg",
-      caption: "First 5km without stopping! Feeling accomplished.",
+      imageUrl: goalImages[4],
+      caption: `One month of ${goal.title} completed! Feeling accomplished.`,
     },
   ];
 
@@ -403,7 +454,7 @@ export default function GoalDetailsScreen() {
           // Animate the background appearing
           Animated.timing(animatedValues.opacity, {
             toValue: 1,
-            duration: 300,
+            duration: 150,
             useNativeDriver: false,
           }).start();
 
@@ -411,34 +462,34 @@ export default function GoalDetailsScreen() {
           Animated.parallel([
             Animated.timing(animatedValues.x, {
               toValue: targetX,
-              duration: 400,
+              duration: 200,
               useNativeDriver: false,
             }),
             Animated.timing(animatedValues.y, {
               toValue: targetY,
-              duration: 400,
+              duration: 200,
               useNativeDriver: false,
             }),
             Animated.timing(animatedValues.width, {
               toValue: MODAL_WIDTH,
-              duration: 400,
+              duration: 200,
               useNativeDriver: false,
             }),
             Animated.timing(animatedValues.height, {
               toValue: MODAL_IMAGE_HEIGHT,
-              duration: 400,
+              duration: 200,
               useNativeDriver: false,
             }),
             Animated.timing(animatedValues.borderRadius, {
               toValue: 16,
-              duration: 400,
+              duration: 200,
               useNativeDriver: false,
             }),
           ]).start(() => {
             // Show the content after image has expanded
             Animated.timing(animatedValues.contentOpacity, {
               toValue: 1,
-              duration: 300,
+              duration: 150,
               useNativeDriver: false,
             }).start(() => {
               setIsAnimating(false);
@@ -460,39 +511,39 @@ export default function GoalDetailsScreen() {
     // First hide the content
     Animated.timing(animatedValues.contentOpacity, {
       toValue: 0,
-      duration: 200,
+      duration: 100,
       useNativeDriver: false,
     }).start(() => {
       // Then shrink the image back to its original position
       Animated.parallel([
         Animated.timing(animatedValues.x, {
           toValue: imagePosition.x,
-          duration: 400,
+          duration: 200,
           useNativeDriver: false,
         }),
         Animated.timing(animatedValues.y, {
           toValue: imagePosition.y,
-          duration: 400,
+          duration: 200,
           useNativeDriver: false,
         }),
         Animated.timing(animatedValues.width, {
           toValue: imagePosition.width,
-          duration: 400,
+          duration: 200,
           useNativeDriver: false,
         }),
         Animated.timing(animatedValues.height, {
           toValue: imagePosition.height,
-          duration: 400,
+          duration: 200,
           useNativeDriver: false,
         }),
         Animated.timing(animatedValues.borderRadius, {
           toValue: 8,
-          duration: 400,
+          duration: 200,
           useNativeDriver: false,
         }),
         Animated.timing(animatedValues.opacity, {
           toValue: 0,
-          duration: 400,
+          duration: 200,
           useNativeDriver: false,
         }),
       ]).start(() => {
@@ -522,44 +573,62 @@ export default function GoalDetailsScreen() {
   const downloadImage = async () => {
     if (selectedDay && Platform.OS !== "web") {
       try {
-        // This is a placeholder for the actual download functionality
-        // You'll need to install expo-file-system and expo-media-library packages
-        // and uncomment the import statements at the top of the file
-        console.log(
-          "Download image functionality requires additional packages"
-        );
-
-        // The commented code below shows how it would work with the packages installed
-        /*
         // Request permission to access media library
         const { status } = await MediaLibrary.requestPermissionsAsync();
-        
-        if (status === 'granted') {
+
+        if (status === "granted") {
           // Create a local file URL for the image
-          const fileUri = FileSystem.documentDirectory + `day_${selectedDay.goalDay}.jpg`;
-          
+          const fileUri =
+            FileSystem.documentDirectory + `day_${selectedDay.goalDay}.jpg`;
+
           // Download the image
           const downloadResult = await FileSystem.downloadAsync(
             selectedDay.imageUrl,
             fileUri
           );
-          
+
           if (downloadResult.status === 200) {
             // Save the image to the media library
-            const asset = await MediaLibrary.createAssetAsync(downloadResult.uri);
-            await MediaLibrary.createAlbumAsync('Yalla Goals', asset, false);
-            
+            const asset = await MediaLibrary.createAssetAsync(
+              downloadResult.uri
+            );
+            await MediaLibrary.createAlbumAsync("Yalla Goals", asset, false);
+
             // Show success feedback
-            console.log('Image saved to gallery');
+            console.log("Image saved to gallery");
           }
         } else {
-          console.log('Permission to access media library denied');
+          console.log("Permission to access media library denied");
         }
-        */
       } catch (error) {
         console.error("Error downloading image:", error);
       }
     }
+  };
+
+  // UPDATED - Handle back button press to navigate to goals tab
+  const handleBackPress = () => {
+    router.back();
+  };
+
+  // In goal-details.tsx - Handle camera button press
+  const handleCameraPress = () => {
+    // Navigate to the goal-camera screen instead of the camera tab
+    router.push({
+      pathname: "/goal-camera",
+      params: {
+        goalId: goal.id,
+        goalTitle: goal.title,
+        goalIcon: goal.icon,
+        goalColor: goal.color,
+        goalFlowState: goal.flowState,
+        goalFrequency: goal.frequency,
+        goalDuration: goal.duration,
+        goalProgress: goal.progress,
+        fromGoalDetail: "true",
+        animation: "slide_from_right",
+      },
+    });
   };
 
   return (
@@ -569,13 +638,20 @@ export default function GoalDetailsScreen() {
         {
           backgroundColor: theme.colors.background,
           paddingTop: insets.top,
-          paddingBottom: insets.bottom,
+          // paddingBottom: insets.bottom,
         },
       ]}
     >
       <Stack.Screen
         options={{
           headerShown: false,
+          // Set transparent background for iOS
+          contentStyle: {
+            backgroundColor: "transparent",
+          },
+          // Enable gesture navigation
+          gestureEnabled: true,
+          gestureDirection: "horizontal",
         }}
       />
 
@@ -589,10 +665,7 @@ export default function GoalDetailsScreen() {
       <View style={styles.headerArea}>
         {/* Header with back button and controls */}
         <View style={styles.headerContainer}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
+          <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
             <Ionicons name="chevron-back" size={24} color="white" />
           </TouchableOpacity>
 
@@ -631,6 +704,44 @@ export default function GoalDetailsScreen() {
               />
             </TouchableOpacity>
           </View>
+
+          {/* Goal Metrics */}
+          {(goal.frequency || goal.duration) && (
+            <View style={styles.goalMetrics}>
+              {goal.frequency && (
+                <View style={styles.metricItem}>
+                  <Ionicons
+                    name="time-outline"
+                    size={16}
+                    color="rgba(255,255,255,0.9)"
+                  />
+                  <Text style={styles.metricText}>{goal.frequency}</Text>
+                </View>
+              )}
+              {goal.duration && (
+                <View style={styles.metricItem}>
+                  <Ionicons
+                    name="calendar-outline"
+                    size={16}
+                    color="rgba(255,255,255,0.9)"
+                  />
+                  <Text style={styles.metricText}>{goal.duration}</Text>
+                </View>
+              )}
+              {goal.progress !== undefined && (
+                <View style={styles.metricItem}>
+                  <Ionicons
+                    name="stats-chart-outline"
+                    size={16}
+                    color="rgba(255,255,255,0.9)"
+                  />
+                  <Text style={styles.metricText}>
+                    {goal.progress}% complete
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
         </View>
 
         {/* Flow State Info Popup */}
@@ -715,7 +826,10 @@ export default function GoalDetailsScreen() {
       </View>
 
       {/* Timeline or Grid View */}
-      <ScrollView style={styles.scrollContent}>
+      <ScrollView
+        style={styles.scrollContent}
+        contentContainerStyle={styles.scrollContentContainer}
+      >
         {isGridView ? (
           <View style={styles.calendarContainer}>
             {sortedMonths.map(([month, items]) => {
@@ -767,7 +881,9 @@ export default function GoalDetailsScreen() {
 
                           return (
                             <TouchableOpacity
-                              ref={(ref) => (dayRefs[dayKey] = ref)}
+                              ref={(ref) => {
+                                if (ref) dayRefs[dayKey] = ref;
+                              }}
                               key={`day-${dayPosition}`}
                               style={styles.calendarDayCell}
                               onPress={() => {
@@ -849,7 +965,9 @@ export default function GoalDetailsScreen() {
                           onPress={() =>
                             showDayModal(item, `timeline-${item.id}`)
                           }
-                          ref={(ref) => (dayRefs[`timeline-${item.id}`] = ref)}
+                          ref={(ref) => {
+                            if (ref) dayRefs[`timeline-${item.id}`] = ref;
+                          }}
                         >
                           <Image
                             source={{ uri: item.imageUrl }}
@@ -983,6 +1101,27 @@ export default function GoalDetailsScreen() {
           </TouchableOpacity>
         </Animated.View>
       </Modal>
+
+      {/* Gradient Background for Add Button */}
+      <LinearGradient
+        colors={["transparent", "rgba(0, 0, 0, 0.5)", "rgba(0, 0, 0, 1)"]}
+        locations={[0, 0.4, 0.9]}
+        style={styles.buttonGradient}
+      />
+
+      {/* Floating Add Button - UPDATED to navigate to goal-camera */}
+      <TouchableOpacity
+        style={styles.floatingCameraButton}
+        onPress={handleCameraPress}
+        activeOpacity={0.8}
+      >
+        <View style={styles.cameraButtonOuterRing}>
+          <View style={styles.cameraButtonInner}>
+            {/* Add button inner circle */}
+            <Ionicons name="add" size={30} color="#000" />
+          </View>
+        </View>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -1053,6 +1192,9 @@ const styles = StyleSheet.create({
   scrollContent: {
     flex: 1,
     paddingHorizontal: 0,
+  },
+  scrollContentContainer: {
+    paddingBottom: 100,
   },
   timelineContainer: {
     paddingVertical: 20,
@@ -1273,6 +1415,7 @@ const styles = StyleSheet.create({
   calendarContainer: {
     paddingVertical: 20,
     paddingHorizontal: 16,
+    paddingBottom: 40,
   },
   calendarMonthContainer: {
     marginBottom: 32,
@@ -1436,6 +1579,72 @@ const styles = StyleSheet.create({
     color: "white",
     fontSize: 16,
     fontFamily: FontFamily.Medium,
+    marginLeft: 8,
+  },
+  buttonGradient: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 100,
+    zIndex: 90,
+  },
+  floatingCameraButton: {
+    position: "absolute",
+    bottom: 30,
+    alignSelf: "center",
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: "transparent",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 100,
+  },
+  cameraButtonOuterRing: {
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    borderWidth: 3,
+    borderColor: "white",
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "transparent",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.3,
+    shadowRadius: 4.65,
+    elevation: 8,
+  },
+  cameraButtonInner: {
+    width: 55,
+    height: 55,
+    borderRadius: 30,
+    backgroundColor: "white",
+    borderWidth: 0,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  goalMetrics: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+    marginTop: 12,
+    width: "100%",
+  },
+  metricItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginRight: 20,
+    marginBottom: 8,
+  },
+  metricText: {
+    fontSize: 14,
+    fontFamily: FontFamily.Regular,
+    color: "white",
     marginLeft: 8,
   },
 });

@@ -3,10 +3,19 @@ import {
   DefaultTheme,
   ThemeProvider,
 } from "@react-navigation/native";
+import { NativeStackNavigationOptions } from "@react-navigation/native-stack";
 import { Stack } from "expo-router";
 import { StatusBar, Text, View } from "react-native";
 import { useColorScheme } from "../hooks/useColorScheme";
 import { useFonts } from "../hooks/useFonts";
+
+// Define valid animations as a type
+type AnimationType = "slide_from_right" | "slide_from_left" | undefined;
+
+// Define the type for our route params
+type RouteParams = {
+  animation?: AnimationType;
+};
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
@@ -37,20 +46,56 @@ export default function RootLayout() {
         translucent={true}
         hidden={false}
       />
-      <Stack screenOptions={{ headerShown: false }}>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          animation: "slide_from_right",
+          gestureEnabled: true,
+          gestureDirection: "horizontal",
+        }}
+      >
+        {/* Main tab navigation */}
         <Stack.Screen
           name="(tabs)"
           options={{
             headerShown: false,
-            animation: "none",
+            animation: "none", // No animation for tab transitions
           }}
         />
+
+        {/* Goal details screen with dynamic animation */}
         <Stack.Screen
           name="goal-details"
-          options={{
-            headerShown: false,
-            presentation: "card", // or "card" depending on desired animation
-            animation: "slide_from_right", // or your preferred animation style
+          options={({ route }) => {
+            // Type cast the params
+            const params = route.params as RouteParams | undefined;
+            const animation = params?.animation || "slide_from_right";
+
+            return {
+              headerShown: false,
+              presentation: "card",
+              animation,
+              gestureEnabled: true,
+              gestureDirection: "horizontal",
+            } as NativeStackNavigationOptions;
+          }}
+        />
+
+        {/* Camera from goal-details with dynamic animation */}
+        <Stack.Screen
+          name="goal-camera"
+          options={({ route }) => {
+            // Type cast the params
+            const params = route.params as RouteParams | undefined;
+            const animation = params?.animation || "slide_from_right";
+
+            return {
+              headerShown: false,
+              presentation: "card",
+              animation,
+              gestureEnabled: true,
+              gestureDirection: "horizontal",
+            } as NativeStackNavigationOptions;
           }}
         />
       </Stack>
