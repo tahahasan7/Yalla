@@ -4,6 +4,7 @@ export interface Log {
   day: string;
   month: string;
   goalDay: number;
+  week: string;
   imageUrl: string;
   caption: string;
 }
@@ -60,15 +61,15 @@ export const getDefaultColor = (): string => {
 
 // Category definitions with custom icons
 export const CATEGORIES: Category[] = [
-  { name: "Fitness", icon: "Run" },
-  { name: "Learning", icon: "Book" },
-  { name: "Wellness", icon: "Leaf" },
-  { name: "Habits", icon: "ionicons", ionIcon: "sync" },
-  { name: "Creative", icon: "Canvas" },
-  { name: "Productivity", icon: "Task" },
-  { name: "Finance", icon: "Money" },
-  { name: "Social", icon: "Group" },
-  { name: "Fun", icon: "Game" },
+  { name: "Fitness", icon: "Fitness" },
+  { name: "Learning", icon: "Learning" },
+  { name: "Wellness", icon: "Wellness" },
+  { name: "Habits", icon: "Habits" },
+  { name: "Creative", icon: "Creative" },
+  { name: "Productivity", icon: "Productivity" },
+  { name: "Finance", icon: "Finance" },
+  { name: "Social", icon: "Social" },
+  { name: "Fun", icon: "Fun" },
 ];
 
 // Mock data for goals with all information in one place
@@ -79,7 +80,7 @@ export const GOALS: Goal[] = [
     frequency: "2 times a week",
     duration: "2 weeks",
     color: "#5CBA5A",
-    icon: "WorkoutRun",
+    icon: "Fitness",
     flowState: "flowing",
     progress: 65,
     category: "Fitness",
@@ -93,6 +94,7 @@ export const GOALS: Goal[] = [
         day: "15",
         month: "November 2025",
         goalDay: 1,
+        week: "Week 1",
         imageUrl:
           "https://i.pinimg.com/736x/9a/d8/3e/9ad83e2c54d9164b4e2753529cddfa05.jpg",
         caption: "First day of Running - started my journey!",
@@ -103,6 +105,7 @@ export const GOALS: Goal[] = [
         day: "17",
         month: "November 2025",
         goalDay: 3,
+        week: "Week 1",
         imageUrl:
           "https://i.pinimg.com/736x/ac/b3/dd/acb3dde1977ab624f553afa69254d658.jpg",
         caption: "Day 3 of my Running goal. Making progress!",
@@ -113,6 +116,7 @@ export const GOALS: Goal[] = [
         day: "20",
         month: "November 2025",
         goalDay: 6,
+        week: "Week 1",
         imageUrl:
           "https://i.pinimg.com/736x/b5/cf/ef/b5cfef1fd703873309b833c6f540321f.jpg",
         caption: "Continuing with Running - feeling good about it.",
@@ -123,6 +127,7 @@ export const GOALS: Goal[] = [
         day: "05",
         month: "December 2025",
         goalDay: 21,
+        week: "Week 3",
         imageUrl:
           "https://i.pinimg.com/736x/57/91/39/579139d694b61e9b9311ead88e2c9ba3.jpg",
         caption: "Running is becoming a habit now. Great progress!",
@@ -135,7 +140,7 @@ export const GOALS: Goal[] = [
     frequency: "4 times a week",
     duration: "Ongoing",
     color: "#EB6247",
-    icon: "StudyDesk",
+    icon: "Learning",
     flowState: "kindling",
     category: "Learning",
     logs: [
@@ -145,6 +150,7 @@ export const GOALS: Goal[] = [
         day: "10",
         month: "October 2025",
         goalDay: 1,
+        week: "Week 1",
         imageUrl:
           "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?q=80&w=1373&auto=format&fit=crop",
         caption: "Started a new Studying routine today!",
@@ -155,6 +161,7 @@ export const GOALS: Goal[] = [
         day: "14",
         month: "October 2025",
         goalDay: 5,
+        week: "Week 1",
         imageUrl:
           "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?q=80&w=1470&auto=format&fit=crop",
         caption: "Day 5 of Studying - focusing on new concepts.",
@@ -165,6 +172,7 @@ export const GOALS: Goal[] = [
         day: "20",
         month: "October 2025",
         goalDay: 11,
+        week: "Week 2",
         imageUrl:
           "https://images.unsplash.com/photo-1588702547923-7093a6c3ba33?q=80&w=1470&auto=format&fit=crop",
         caption: "Making good progress with my Studying.",
@@ -177,7 +185,7 @@ export const GOALS: Goal[] = [
     frequency: "5 times a week",
     duration: "3 weeks",
     color: "#4E85DD",
-    icon: "StudyDesk",
+    icon: "Wellness",
     flowState: "glowing",
     progress: 30,
     category: "Wellness",
@@ -188,6 +196,7 @@ export const GOALS: Goal[] = [
         day: "05",
         month: "September 2025",
         goalDay: 1,
+        week: "Week 1",
         imageUrl:
           "https://images.unsplash.com/photo-1506126613408-eca07ce68773?q=80&w=1498&auto=format&fit=crop",
         caption: "Starting my Meditation practice today.",
@@ -198,6 +207,7 @@ export const GOALS: Goal[] = [
         day: "10",
         month: "September 2025",
         goalDay: 6,
+        week: "Week 1",
         imageUrl:
           "https://images.unsplash.com/photo-1545389336-cf090694435e?q=80&w=1374&auto=format&fit=crop",
         caption: "Finding peace through Meditation on day 6.",
@@ -208,6 +218,7 @@ export const GOALS: Goal[] = [
         day: "15",
         month: "September 2025",
         goalDay: 11,
+        week: "Week 2",
         imageUrl:
           "https://images.unsplash.com/photo-1532798442725-41036acc7489?q=80&w=1374&auto=format&fit=crop",
         caption: "Meditation is becoming easier with practice.",
@@ -220,7 +231,7 @@ export const GOALS: Goal[] = [
     frequency: "3 times a week",
     duration: "Ongoing",
     color: "#9668D9",
-    icon: "StudyDesk",
+    icon: "Habits",
     flowState: "still",
     category: "Habits",
     logs: [
@@ -230,6 +241,7 @@ export const GOALS: Goal[] = [
         day: "01",
         month: "October 2025",
         goalDay: 1,
+        week: "Week 1",
         imageUrl:
           "https://images.unsplash.com/photo-1515592302748-6c5ea17e2f0e?q=80&w=1374&auto=format&fit=crop",
         caption: "Started a new book today for my Reading goal.",
@@ -240,6 +252,7 @@ export const GOALS: Goal[] = [
         day: "05",
         month: "October 2025",
         goalDay: 5,
+        week: "Week 1",
         imageUrl:
           "https://images.unsplash.com/photo-1544947950-fa07a98d237f?q=80&w=1374&auto=format&fit=crop",
         caption: "Really enjoying the book I started for my Reading goal.",
@@ -252,7 +265,7 @@ export const GOALS: Goal[] = [
     frequency: "3 times a week",
     duration: "1 month",
     color: "#FF9F45",
-    icon: "WorkoutRun",
+    icon: "Creative",
     flowState: "flowing",
     completed: true,
     completedDate: "April 28, 2025",
@@ -265,6 +278,7 @@ export const GOALS: Goal[] = [
         day: "01",
         month: "January 2025",
         goalDay: 1,
+        week: "Week 1",
         imageUrl:
           "https://images.unsplash.com/photo-1543443258-92b04ad5ec6b?q=80&w=1470&auto=format&fit=crop",
         caption: "First day of learning Guitar Practice!",
@@ -275,6 +289,7 @@ export const GOALS: Goal[] = [
         day: "10",
         month: "January 2025",
         goalDay: 10,
+        week: "Week 2",
         imageUrl:
           "https://images.unsplash.com/photo-1605020420620-20c943cc4669?q=80&w=1470&auto=format&fit=crop",
         caption: "Guitar Practice getting easier with each session.",
@@ -285,6 +300,7 @@ export const GOALS: Goal[] = [
         day: "20",
         month: "January 2025",
         goalDay: 20,
+        week: "Week 3",
         imageUrl:
           "https://images.unsplash.com/photo-1510915361894-db8b60106cb1?q=80&w=1470&auto=format&fit=crop",
         caption: "Mastered my first song with Guitar Practice!",
@@ -295,6 +311,7 @@ export const GOALS: Goal[] = [
         day: "28",
         month: "January 2025",
         goalDay: 28,
+        week: "Week 4",
         imageUrl:
           "https://images.unsplash.com/photo-1514649923863-ceaf75b7ec40?q=80&w=1470&auto=format&fit=crop",
         caption: "Almost done with my Guitar Practice challenge!",
@@ -305,6 +322,7 @@ export const GOALS: Goal[] = [
         day: "30",
         month: "January 2025",
         goalDay: 30,
+        week: "Week 5",
         imageUrl:
           "https://images.unsplash.com/photo-1511379938547-c1f69419868d?q=80&w=1470&auto=format&fit=crop",
         caption: "Completed my Guitar Practice challenge successfully!",

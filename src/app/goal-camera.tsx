@@ -1,9 +1,9 @@
+import { Ionicons } from "@expo/vector-icons";
 import {
-  Ionicons,
-  MaterialCommunityIcons,
-  MaterialIcons,
-} from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+  useFocusEffect,
+  useIsFocused,
+  useNavigation,
+} from "@react-navigation/native";
 import {
   CameraType,
   CameraView,
@@ -13,13 +13,13 @@ import {
 import * as Haptics from "expo-haptics";
 import * as MediaLibrary from "expo-media-library";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  BackHandler,
   Dimensions,
   Easing,
-  FlatList,
   StatusBar,
   StyleSheet,
   Text,
@@ -29,140 +29,15 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DarkTheme, DefaultTheme } from "../constants/theme";
 import { useColorScheme } from "../hooks/useColorScheme";
+// Import Goal interface and GOALS from goalData
+import SelectGoalButton from "../components/goal-camera/SelectGoalButton";
+import { Goal, GOALS } from "../constants/goalData";
 
 // Get screen dimensions for responsive layout
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
-// Import Goal interface
-interface Goal {
-  id: string;
-  title: string;
-  frequency: string;
-  duration: string;
-  color: string;
-  icon: string; // This can be "WorkoutRun", "StudyDesk", or any other icon name
-  flowState: "still" | "kindling" | "flowing" | "glowing";
-  lastImage?: string;
-  lastImageDate?: string;
-  progress?: number;
-  completed?: boolean;
-  completedDate?: string;
-}
-
-// Icons for each flow state
-const flowStateIcons: Record<Goal["flowState"], string> = {
-  still: "water-outline",
-  kindling: "flame-outline",
-  flowing: "water",
-  glowing: "sunny",
-};
-
-// Mock goals data - this would typically come from a context or API
-const GOALS: Goal[] = [
-  {
-    id: "1",
-    title: "Running",
-    frequency: "2 times a week",
-    duration: "15 Days / 7 weeks",
-    color: "#5CBA5A",
-    icon: "WorkoutRun",
-    flowState: "flowing",
-    progress: 65,
-  },
-  {
-    id: "2",
-    title: "Studying",
-    frequency: "4 times a week",
-    duration: "Ongoing",
-    color: "#EB6247",
-    icon: "StudyDesk",
-    flowState: "kindling",
-  },
-  {
-    id: "3",
-    title: "Meditation",
-    frequency: "5 times a week",
-    duration: "24 Days",
-    color: "#4E85DD",
-    icon: "StudyDesk",
-    flowState: "glowing",
-    progress: 30,
-  },
-  {
-    id: "4",
-    title: "Guitar Practice",
-    frequency: "Daily",
-    duration: "30 Days",
-    color: "#8A2BE2",
-    icon: "guitar-acoustic",
-    flowState: "still",
-  },
-];
-
-// Component for each goal item
-const GoalItem = ({
-  goal,
-  isSelected,
-  onSelect,
-}: {
-  goal: Goal;
-  isSelected: boolean;
-  onSelect: (goal: Goal) => void;
-}) => {
-  return (
-    <TouchableOpacity
-      style={[
-        styles.goalItem,
-        isSelected && { borderColor: goal.color, borderWidth: 2 },
-      ]}
-      onPress={() => onSelect(goal)}
-      activeOpacity={0.7}
-    >
-      <View style={[styles.goalIconContainer, { backgroundColor: goal.color }]}>
-        {goal.icon === "WorkoutRun" ? (
-          <MaterialIcons name="directions-run" size={22} color="#fff" />
-        ) : goal.icon === "StudyDesk" ? (
-          <MaterialIcons name="menu-book" size={22} color="#fff" />
-        ) : (
-          <MaterialCommunityIcons
-            // @ts-ignore - icon string is compatible but types aren't matching
-            name={goal.icon}
-            size={22}
-            color="#fff"
-          />
-        )}
-      </View>
-
-      <View style={styles.goalInfo}>
-        <Text style={styles.goalTitle}>{goal.title}</Text>
-        <View style={styles.goalFrequencyContainer}>
-          <Text style={styles.goalFrequency}>{goal.frequency}</Text>
-        </View>
-      </View>
-
-      <View style={styles.flowStateContainer}>
-        <Ionicons
-          // @ts-ignore - icon name is valid but types don't match
-          name={flowStateIcons[goal.flowState]}
-          size={18}
-          color={goal.color}
-        />
-        <Text style={[styles.flowStateText, { color: goal.color }]}>
-          {goal.flowState.charAt(0).toUpperCase() + goal.flowState.slice(1)}
-        </Text>
-      </View>
-
-      {isSelected && (
-        <View style={styles.selectedIndicator}>
-          <Ionicons name="checkmark-circle" size={22} color={goal.color} />
-        </View>
-      )}
-    </TouchableOpacity>
-  );
-};
-
 export default function GoalCameraScreen() {
-  // State and variables from the original component
+  const isFocused = useIsFocused();
   const colorScheme = useColorScheme();
   const theme = colorScheme === "dark" ? DarkTheme : DefaultTheme;
   const [facing, setFacing] = useState<CameraType>("back");
@@ -174,15 +49,27 @@ export default function GoalCameraScreen() {
   const [processing, setProcessing] = useState(false);
   const [showMusicSelector, setShowMusicSelector] = useState(false);
   const [selectedMusic, setSelectedMusic] = useState<string | null>(null);
-  const [showGoalSelector, setShowGoalSelector] = useState(false);
   const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
+  const [cameraReady, setCameraReady] = useState(false);
+  const [isNavigating, setIsNavigating] = useState(false);
+
   const cameraRef = useRef<any>(null);
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const router = useRouter();
   const params = useLocalSearchParams();
-  const goalSelectorAnim = useRef(new Animated.Value(0)).current;
-  const goalSelectorHeight = useRef(new Animated.Value(0)).current;
+
+  // Add isMounted ref to prevent state updates after unmounting
+  const isMounted = useRef(true);
+  // Add timeoutRef to track the setTimeout for photo capture
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Add cameraInitTimeoutRef to track the setTimeout for camera initialization
+  const cameraInitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+
+  // Filter out completed goals
+  const activeGoals = GOALS.filter((goal) => !goal.completed);
 
   // Always show back button in goal-camera
   const [showBackButton, setShowBackButton] = useState(true);
@@ -202,21 +89,126 @@ export default function GoalCameraScreen() {
 
   // Add state for freeze frame effect
   const [saveToast, setSaveToast] = useState(false);
-  const [goalSelectionToast, setGoalSelectionToast] = useState(false);
   const [freezeFrame, setFreezeFrame] = useState(false);
   const freezeFrameScale = useRef(new Animated.Value(1)).current;
+
+  // Use focus effect to handle all types of navigation (including gestures)
+  useFocusEffect(
+    useCallback(() => {
+      // Reset navigation state
+      setIsNavigating(false);
+
+      // Initialize camera with a delay
+      if (cameraPermission?.granted) {
+        cameraInitTimeoutRef.current = setTimeout(() => {
+          if (isMounted.current) {
+            setCameraReady(true);
+          }
+        }, 300);
+      }
+
+      // Hardware back button handler (Android)
+      const backHandler = BackHandler.addEventListener(
+        "hardwareBackPress",
+        () => {
+          if (isFocused) {
+            handleBackPress();
+            return true; // Prevent default behavior
+          }
+          return false;
+        }
+      );
+
+      // Cleanup function when losing focus
+      return () => {
+        // Set navigating state
+        setIsNavigating(true);
+
+        // Turn off camera readiness
+        setCameraReady(false);
+
+        // Clear camera init timeout
+        if (cameraInitTimeoutRef.current) {
+          clearTimeout(cameraInitTimeoutRef.current);
+          cameraInitTimeoutRef.current = null;
+        }
+
+        // clear the pending photo timeout if it's still pending
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
+
+        // Release camera resources
+        if (cameraRef.current) {
+          try {
+            // Turn off torch if it's on
+            if (torchOn) {
+              setTorchOn(false);
+            }
+            // Explicitly release camera
+            cameraRef.current = null;
+          } catch (e) {
+            console.log("Error cleaning up camera:", e);
+          }
+        }
+
+        // Remove back handler
+        backHandler.remove();
+
+        // Stop animations
+        fadeAnim.stopAnimation();
+        captureAnimation.stopAnimation();
+        torchIconAnim.stopAnimation();
+        flashIconAnim.stopAnimation();
+        freezeFrameScale.stopAnimation();
+        musicDropdownAnim.stopAnimation();
+      };
+    }, [isFocused, cameraPermission?.granted])
+  );
+
+  // Cleanup function when component unmounts
+  useEffect(() => {
+    return () => {
+      // Set isMounted to false to prevent state updates after unmounting
+      isMounted.current = false;
+
+      // Clear any timeouts
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+      }
+
+      if (cameraInitTimeoutRef.current) {
+        clearTimeout(cameraInitTimeoutRef.current);
+      }
+
+      // Reset any ongoing animations
+      fadeAnim.stopAnimation();
+      captureAnimation.stopAnimation();
+      torchIconAnim.stopAnimation();
+      flashIconAnim.stopAnimation();
+      freezeFrameScale.stopAnimation();
+      musicDropdownAnim.stopAnimation();
+
+      // Reset camera state
+      if (cameraRef.current) {
+        // Release camera resources
+        if (torchOn) {
+          setTorchOn(false);
+        }
+        cameraRef.current = null;
+      }
+    };
+  }, []);
 
   // Auto-select goal if navigated from goal details
   useEffect(() => {
     if (params.goalId) {
       const goalId = String(params.goalId);
-      const goalToSelect = GOALS.find((g) => g.id === goalId);
+      const goalToSelect = activeGoals.find((g) => g.id === goalId);
 
       if (goalToSelect) {
         setSelectedGoal(goalToSelect);
-        // Show toast message
-        setGoalSelectionToast(true);
-        setTimeout(() => setGoalSelectionToast(false), 2000);
       }
     }
   }, [params.goalId]);
@@ -271,8 +263,32 @@ export default function GoalCameraScreen() {
 
   // Handle back button press - return to the goal details screen
   const handleBackPress = () => {
-    // Navigate back to the goal details page
-    router.back();
+    // Prevent rapid navigation
+    if (isNavigating) return;
+
+    setIsNavigating(true);
+
+    // First ensure camera is released
+    if (cameraRef.current) {
+      if (torchOn) {
+        setTorchOn(false);
+      }
+      cameraRef.current = null;
+    }
+
+    // Clear any pending timeouts
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+
+    // Turn off camera readiness
+    setCameraReady(false);
+
+    // Navigate back after a small delay
+    setTimeout(() => {
+      router.back();
+    }, 50);
   };
 
   // Request permissions when the component mounts
@@ -299,7 +315,7 @@ export default function GoalCameraScreen() {
         sortBy: ["creationTime"],
       });
 
-      if (result.assets && result.assets.length > 0) {
+      if (result.assets && result.assets.length > 0 && isMounted.current) {
         const mostRecentImage = result.assets[0];
         setCapturedImage(mostRecentImage.uri);
       }
@@ -316,7 +332,7 @@ export default function GoalCameraScreen() {
       return;
     }
 
-    if (cameraRef.current && !processing) {
+    if (cameraRef.current && !processing && !isNavigating) {
       try {
         // Animate the shutter button
         Animated.sequence([
@@ -362,27 +378,48 @@ export default function GoalCameraScreen() {
         ]).start();
 
         // Capture the photo
-        setTimeout(async () => {
-          const photo = await cameraRef.current.takePictureAsync({
-            quality: 0.9,
-            skipProcessing: false,
-          });
+        timeoutRef.current = setTimeout(async () => {
+          if (!cameraRef.current || !isMounted.current || isNavigating) {
+            if (isMounted.current) {
+              setProcessing(false);
+              setFreezeFrame(false);
+            }
+            return;
+          }
 
-          // Set the captured image and reset processing state
-          setCapturedImage(photo.uri);
-          setProcessing(false);
-          setFreezeFrame(false);
+          try {
+            const photo = await cameraRef.current.takePictureAsync({
+              quality: 0.9,
+              skipProcessing: false,
+            });
+
+            if (isMounted.current) {
+              setCapturedImage(photo.uri);
+              setProcessing(false);
+              setFreezeFrame(false);
+            }
+          } catch (e) {
+            console.error("Camera error:", e);
+            if (isMounted.current) {
+              setProcessing(false);
+              setFreezeFrame(false);
+            }
+          }
         }, 600);
       } catch (error) {
-        console.error("Error taking photo:", error);
-        setProcessing(false);
-        setFreezeFrame(false);
+        if (isMounted.current) {
+          console.error("Error taking photo:", error);
+          setProcessing(false);
+          setFreezeFrame(false);
+        }
       }
     }
   };
 
   // Toggle camera facing
   const toggleCameraFacing = () => {
+    if (isNavigating) return;
+
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     // Camera flip animation
@@ -408,50 +445,10 @@ export default function GoalCameraScreen() {
     }
   };
 
-  // Toggle goal selector
-  function toggleGoalSelector() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-    // If goal selector is currently visible, hide it
-    if (showGoalSelector) {
-      Animated.parallel([
-        Animated.timing(goalSelectorAnim, {
-          toValue: 0,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-        Animated.timing(goalSelectorHeight, {
-          toValue: 0,
-          duration: 250,
-          useNativeDriver: false,
-        }),
-      ]).start(() => {
-        setShowGoalSelector(false);
-      });
-    } else {
-      // Show goal selector
-      setShowGoalSelector(true);
-      Animated.parallel([
-        Animated.timing(goalSelectorAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(goalSelectorHeight, {
-          toValue: 280, // Set to the height of your goal selector
-          duration: 300,
-          useNativeDriver: false,
-        }),
-      ]).start();
-    }
-  }
-
-  // Select a goal
-  function selectGoal(goal: Goal) {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+  // Handle goal selection
+  const handleGoalSelect = (goal: Goal) => {
     setSelectedGoal(goal);
-    toggleGoalSelector();
-  }
+  };
 
   // If camera permission is not granted, show permission request UI
   if (!cameraPermission?.granted) {
@@ -487,6 +484,8 @@ export default function GoalCameraScreen() {
           contentStyle: {
             backgroundColor: "transparent",
           },
+          // Disable gesture navigation to prevent resource conflicts
+          gestureEnabled: true,
         }}
       />
 
@@ -520,13 +519,18 @@ export default function GoalCameraScreen() {
             },
           ]}
         >
-          <CameraView
-            style={styles.camera}
-            facing={facing}
-            flash={flash}
-            enableTorch={torchOn}
-            ref={cameraRef}
-          />
+          {isFocused &&
+            cameraPermission?.granted &&
+            cameraReady &&
+            !isNavigating && (
+              <CameraView
+                style={styles.camera}
+                facing={facing}
+                flash={flash}
+                enableTorch={torchOn}
+                ref={cameraRef}
+              />
+            )}
           {/* Overlay controls rendered on top of the camera */}
           <View style={styles.overlayContainer}>
             {/* Top controls */}
@@ -537,80 +541,26 @@ export default function GoalCameraScreen() {
                   <TouchableOpacity
                     style={styles.backButton}
                     onPress={handleBackPress}
+                    disabled={isNavigating}
                   >
                     <Ionicons name="chevron-back" size={28} color="white" />
                   </TouchableOpacity>
                 )}
 
-                {/* Improved Goal Selector Button */}
-                <TouchableOpacity
-                  style={[
-                    styles.goalSelectorButton,
-                    selectedGoal
-                      ? { backgroundColor: selectedGoal.color }
-                      : null,
-                  ]}
-                  onPress={toggleGoalSelector}
-                  activeOpacity={0.8}
-                >
-                  {selectedGoal ? (
-                    <React.Fragment>
-                      <View style={styles.selectedIndicator}>
-                        {selectedGoal.icon === "WorkoutRun" ? (
-                          <MaterialIcons
-                            name="directions-run"
-                            size={18}
-                            color="#fff"
-                          />
-                        ) : selectedGoal.icon === "StudyDesk" ? (
-                          <MaterialIcons
-                            name="menu-book"
-                            size={18}
-                            color="#fff"
-                          />
-                        ) : (
-                          <MaterialCommunityIcons
-                            // @ts-ignore - icon string is compatible but types aren't matching
-                            name={selectedGoal.icon}
-                            size={18}
-                            color="#fff"
-                          />
-                        )}
-                      </View>
-                      <Text style={styles.selectedGoalText}>
-                        {selectedGoal.title}
-                      </Text>
-                      <Ionicons
-                        name={showGoalSelector ? "chevron-up" : "chevron-down"}
-                        size={16}
-                        color="#fff"
-                      />
-                    </React.Fragment>
-                  ) : (
-                    <React.Fragment>
-                      <Ionicons name="flag-outline" size={18} color="white" />
-                      <Text style={styles.goalSelectorButtonText}>
-                        Select Goal
-                      </Text>
-                      <Ionicons
-                        name={showGoalSelector ? "chevron-up" : "chevron-down"}
-                        size={16}
-                        color="white"
-                      />
-                    </React.Fragment>
-                  )}
-                </TouchableOpacity>
+                {/* Use the new SelectGoalButton component */}
+                <SelectGoalButton
+                  selectedGoal={selectedGoal}
+                  onSelectGoal={handleGoalSelect}
+                />
               </View>
 
-              <View
-                style={{
-                  flexDirection: "column",
-                  gap: 12,
-                }}
-              >
+              {/* Control buttons in vertical stack */}
+              <View style={styles.controlButtonsContainer}>
+                {/* Flash button */}
                 <TouchableOpacity
                   style={styles.controlButton}
                   onPress={toggleFlash}
+                  disabled={isNavigating}
                 >
                   <Ionicons
                     name={flash === "off" ? "flash-off" : "flash"}
@@ -619,15 +569,18 @@ export default function GoalCameraScreen() {
                   />
                 </TouchableOpacity>
 
+                {/* Torch button */}
                 {facing === "back" && (
                   <TouchableOpacity
                     style={[
                       styles.controlButton,
+                      { marginTop: 12 },
                       torchOn
                         ? { backgroundColor: "rgba(255, 255, 255, 0.3)" }
                         : null,
                     ]}
                     onPress={toggleTorch}
+                    disabled={isNavigating}
                   >
                     <Ionicons
                       name={torchOn ? "flashlight" : "flashlight-outline"}
@@ -638,62 +591,6 @@ export default function GoalCameraScreen() {
                 )}
               </View>
             </View>
-
-            {/* Improved Goal selector dropdown */}
-            {showGoalSelector && (
-              <Animated.View
-                style={[
-                  styles.goalSelectorContainer,
-                  {
-                    opacity: goalSelectorAnim,
-                    transform: [
-                      {
-                        translateY: goalSelectorAnim.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [-50, 0],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-              >
-                <View style={styles.goalSelectorHeader}>
-                  <Text style={styles.goalSelectorTitle}>Select a Goal</Text>
-                  <TouchableOpacity
-                    style={styles.closeButton}
-                    onPress={toggleGoalSelector}
-                  >
-                    <Ionicons
-                      name="close"
-                      size={22}
-                      color="rgba(255,255,255,0.8)"
-                    />
-                  </TouchableOpacity>
-                </View>
-
-                <Text style={styles.goalSelectorSubtitle}>
-                  Choose which goal you're working towards with this photo
-                </Text>
-
-                <FlatList
-                  data={GOALS}
-                  keyExtractor={(item) => item.id}
-                  renderItem={({ item }) => (
-                    <GoalItem
-                      goal={item}
-                      isSelected={selectedGoal?.id === item.id}
-                      onSelect={selectGoal}
-                    />
-                  )}
-                  showsVerticalScrollIndicator={false}
-                  style={styles.goalList}
-                  contentContainerStyle={{
-                    paddingHorizontal: 16,
-                    paddingBottom: 20,
-                  }}
-                />
-              </Animated.View>
-            )}
 
             {/* Night mode overlay */}
             {nightMode && (
@@ -712,6 +609,7 @@ export default function GoalCameraScreen() {
               <TouchableOpacity
                 style={styles.galleryButton}
                 onPress={pickImage}
+                disabled={isNavigating || processing}
               >
                 <Ionicons name="images" size={30} color="white" />
               </TouchableOpacity>
@@ -719,11 +617,11 @@ export default function GoalCameraScreen() {
               <TouchableOpacity
                 style={[
                   styles.captureButton,
-                  processing && styles.captureButtonDisabled,
+                  (processing || isNavigating) && styles.captureButtonDisabled,
                 ]}
                 onPress={takePhoto}
                 activeOpacity={0.7}
-                disabled={processing}
+                disabled={processing || isNavigating}
               >
                 {processing ? (
                   <ActivityIndicator
@@ -746,6 +644,7 @@ export default function GoalCameraScreen() {
               <TouchableOpacity
                 style={styles.flipButton}
                 onPress={toggleCameraFacing}
+                disabled={isNavigating || processing}
               >
                 <Ionicons name="camera-reverse" size={30} color="white" />
               </TouchableOpacity>
@@ -753,18 +652,6 @@ export default function GoalCameraScreen() {
           </View>
         </Animated.View>
       </View>
-
-      {/* Goal Selection Toast */}
-      {goalSelectionToast && (
-        <View style={styles.goalSelectionToast}>
-          <Ionicons name="checkmark-circle" size={20} color="white" />
-          <Text style={styles.goalSelectionToastText}>
-            {selectedGoal
-              ? `Selected goal: ${selectedGoal.title}`
-              : "Goal selected"}
-          </Text>
-        </View>
-      )}
     </View>
   );
 }
@@ -858,155 +745,6 @@ const styles = StyleSheet.create({
     height: 70,
     borderRadius: 35,
   },
-
-  // Goal selector styled like modern apps
-  goalSelectorButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    borderRadius: 25,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    height: 44,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.2)",
-    maxWidth: SCREEN_WIDTH - 120,
-  },
-  goalSelectorButtonText: {
-    color: "white",
-    fontSize: 14,
-    fontWeight: "500",
-    marginHorizontal: 8,
-  },
-  selectedGoalText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-    marginRight: 8,
-    flex: 1,
-  },
-  goalSelectorContainer: {
-    position: "absolute",
-    top: 80,
-    left: 16,
-    right: 16,
-    backgroundColor: "rgba(24, 24, 27, 0.98)",
-    borderRadius: 24,
-    overflow: "hidden",
-    zIndex: 1000,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 15,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.1)",
-  },
-  goalSelectorHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.1)",
-  },
-  goalSelectorTitle: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-  },
-  closeButton: {
-    padding: 6,
-    borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    width: 32,
-    height: 32,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  goalSelectorSubtitle: {
-    color: "rgba(255, 255, 255, 0.7)",
-    fontSize: 13,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 16,
-    fontWeight: "400",
-    letterSpacing: 0.2,
-  },
-  goalList: {
-    marginBottom: 20,
-  },
-  goalItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
-    borderRadius: 18,
-    marginBottom: 10,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
-  },
-  goalIconContainer: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 14,
-  },
-  goalInfo: {
-    flex: 1,
-  },
-  goalTitle: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 2,
-  },
-  goalFrequencyContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  goalFrequency: {
-    color: "rgba(255, 255, 255, 0.7)",
-    fontSize: 13,
-  },
-  flowStateContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginRight: 6,
-  },
-  flowStateText: {
-    fontSize: 12,
-    fontWeight: "600",
-    marginLeft: 4,
-  },
-  selectedIndicator: {
-    marginRight: 8,
-  },
-  goalSelectionToast: {
-    position: "absolute",
-    bottom: 100,
-    alignSelf: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.8)",
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderRadius: 20,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  goalSelectionToastText: {
-    color: "#fff",
-    marginLeft: 8,
-    fontSize: 14,
-  },
   permissionButton: {
     flex: 1,
     justifyContent: "center",
@@ -1020,5 +758,10 @@ const styles = StyleSheet.create({
   overlayContainer: {
     ...StyleSheet.absoluteFillObject,
     zIndex: 1,
+  },
+  controlButtonsContainer: {
+    flexDirection: "column",
+    justifyContent: "flex-start",
+    alignItems: "center",
   },
 });

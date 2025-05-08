@@ -281,11 +281,7 @@ const PostItem = ({
           >
             <View style={styles.postSummary}>
               {/* Goal Container with reveal animation */}
-              <TouchableOpacity
-                style={styles.goalContainer}
-                onPress={() => handleDoubleTap(item.id)} // Added double-tap gesture
-                activeOpacity={0.9}
-              >
+              <View style={styles.goalContainer}>
                 <View style={styles.goal}>
                   <Icon name="WorkoutRun" color={"white"} size={24} />
                   <Text style={styles.goalName}>{item.goal.name}</Text>
@@ -296,7 +292,7 @@ const PostItem = ({
 
                   <Text style={styles.weekText}>Week {item.goal.week}</Text>
                 </View>
-              </TouchableOpacity>
+              </View>
             </View>
 
             {/* Right side controls with enhanced animations */}
@@ -305,7 +301,7 @@ const PostItem = ({
               <View style={styles.musicContainer}>
                 <TouchableOpacity
                   onPress={handleOpenMusicBottomSheet}
-                  hitSlop={10}
+                  hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
                 >
                   <Animated.Image
                     source={{ uri: item.song.coverUrl }}
@@ -324,7 +320,7 @@ const PostItem = ({
                 style={[styles.likeButton, isLiked && styles.likeButtonActive]}
                 onPress={() => handleLike(item.id)}
                 activeOpacity={0.7}
-                hitSlop={10}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <Animated.View
                   style={{
@@ -548,7 +544,7 @@ const styles = StyleSheet.create({
   likeContainer: {
     flexDirection: "column",
     justifyContent: "flex-end",
-    gap: 30,
+    gap: 50,
   },
   likeButton: {
     width: 41,
@@ -590,6 +586,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     zIndex: 10,
+    pointerEvents: "none",
   },
   heartParticle: {
     position: "absolute",

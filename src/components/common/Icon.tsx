@@ -27,6 +27,7 @@ import StickyNote from "../../assets/icons/sticky-note-02.js";
 import Still from "../../assets/icons/still.js";
 import StudyDesk from "../../assets/icons/study-desk-solid-rounded.js";
 import Surprise from "../../assets/icons/surprise.js";
+import SyncOutline from "../../assets/icons/sync-outline.js";
 import Task02SolidRounded from "../../assets/icons/task-02-solid-rounded.js";
 import TimeSchedule from "../../assets/icons/time-schedule.js";
 import UserGroupSolidRounded from "../../assets/icons/user-group-solid-rounded .js";
@@ -66,6 +67,7 @@ const IconComponents: Record<string, React.ComponentType<CustomIconProps>> = {
   Still,
   StudyDesk,
   Surprise,
+  SyncOutline,
   Task02SolidRounded,
   TimeSchedule,
   UserGroupSolidRounded,
@@ -98,6 +100,18 @@ const IconComponents: Record<string, React.ComponentType<CustomIconProps>> = {
   Time: TimeSchedule,
   Group: UserGroupSolidRounded,
   Run: WorkoutRun,
+  Sync: SyncOutline,
+
+  // Category-specific aliases
+  Fitness: WorkoutRun,
+  Learning: BookOpen01SolidRounded,
+  Wellness: Leaf01SolidRounded,
+  Habits: SyncOutline,
+  Creative: PaintBoardSolidStandard,
+  Productivity: Task02SolidRounded,
+  Finance: MoneyBag01SolidRounded,
+  Social: UserGroupSolidRounded,
+  Fun: GameController03SolidRounded,
 };
 
 // Icon component props

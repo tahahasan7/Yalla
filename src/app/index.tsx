@@ -5,7 +5,7 @@ export default function Index() {
   const isAuthenticated = true; // Replace with actual auth check
 
   if (!isAuthenticated) {
-    return <Redirect href="/auth/login" />;
+    return <Redirect href="/(tabs)/goals" />;
   }
 
   return <Redirect href="/(tabs)/goals" />;

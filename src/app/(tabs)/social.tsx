@@ -11,6 +11,7 @@ import {
   NativeSyntheticEvent,
   StatusBar,
   StyleSheet,
+  Text,
   TouchableOpacity,
   useWindowDimensions,
   View,
@@ -308,47 +309,60 @@ export default function SocialScreen() {
 
   // Enhanced like animation with more dramatic effects
   const handleLike = (postId: string): void => {
+    // Check current like state before toggling
+    const isCurrentlyLiked = likedPosts[postId] || false;
+
     // Toggle liked state
     setLikedPosts((prev) => ({
       ...prev,
       [postId]: !prev[postId],
     }));
 
-    // If liking (not unliking), show particles
-    if (!likedPosts[postId]) {
-      // Trigger haptic feedback
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-      // Show particles
+    // Only show particles when liking (not when unliking)
+    if (!isCurrentlyLiked) {
+      // Simply trigger a new particles animation
+      // The HeartParticles component now handles its own lifecycle
       setShowParticles((prev) => ({
         ...prev,
         [postId]: true,
       }));
 
-      // Add a scale animation to the post when liked
-      Animated.sequence([
-        Animated.timing(headerAnimation, {
-          toValue: 1.1,
-          duration: 150,
-          useNativeDriver: true,
-          easing: Easing.out(Easing.cubic),
-        }),
-        Animated.spring(headerAnimation, {
-          toValue: 1,
-          friction: 5,
-          tension: 40,
-          useNativeDriver: true,
-        }),
-      ]).start();
-
-      // Hide particles after animation completes
+      // Trigger particle animation again after a tiny delay
+      // to ensure React detects this as a new state change
       setTimeout(() => {
         setShowParticles((prev) => ({
           ...prev,
           [postId]: false,
         }));
-      }, 1500);
+
+        // Then immediately set it back to true to trigger a fresh animation
+        setTimeout(() => {
+          setShowParticles((prev) => ({
+            ...prev,
+            [postId]: true,
+          }));
+        }, 0);
+      }, 0);
     }
+
+    // Add a scale animation to the post when clicked (both like/unlike)
+    Animated.sequence([
+      Animated.timing(headerAnimation, {
+        toValue: 1.1,
+        duration: 150,
+        useNativeDriver: true,
+        easing: Easing.out(Easing.cubic),
+      }),
+      Animated.spring(headerAnimation, {
+        toValue: 1,
+        friction: 5,
+        tension: 40,
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    // Trigger haptic feedback
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
   };
 
   // Double tap to like gesture
@@ -357,24 +371,27 @@ export default function SocialScreen() {
     const DOUBLE_TAP_DELAY = 300;
 
     if (now - lastTapRef.current < DOUBLE_TAP_DELAY) {
-      // It's a double tap - like the post
-      handleLike(postId);
+      // It's a double tap - like the post if not already liked
+      if (!likedPosts[postId]) {
+        // Call handleLike to ensure consistent behavior
+        handleLike(postId);
 
-      // Add extra animation for double tap
-      Animated.sequence([
-        Animated.spring(headerAnimation, {
-          toValue: 1.15,
-          friction: 3,
-          tension: 40,
-          useNativeDriver: true,
-        }),
-        Animated.spring(headerAnimation, {
-          toValue: 1,
-          friction: 5,
-          tension: 40,
-          useNativeDriver: true,
-        }),
-      ]).start();
+        // Add extra animation for double tap
+        Animated.sequence([
+          Animated.spring(headerAnimation, {
+            toValue: 1.15,
+            friction: 3,
+            tension: 40,
+            useNativeDriver: true,
+          }),
+          Animated.spring(headerAnimation, {
+            toValue: 1,
+            friction: 5,
+            tension: 40,
+            useNativeDriver: true,
+          }),
+        ]).start();
+      }
     }
 
     lastTapRef.current = now;
@@ -393,9 +410,6 @@ export default function SocialScreen() {
       tension: 40,
       useNativeDriver: false,
     }).start();
-
-    // Provide haptic feedback
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
   // Improved scroll end drag handler with better refresh detection
@@ -664,6 +678,28 @@ export default function SocialScreen() {
     );
   };
 
+  // Footer component to show when user reaches the end of posts
+  const renderFooter = () => {
+    return (
+      <View
+        style={{
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Text
+          style={{
+            fontSize: 14,
+            color: "rgba(255,255,255,0.6)",
+            textAlign: "center",
+          }}
+        >
+          These are all the posts for now
+        </Text>
+      </View>
+    );
+  };
+
   // Create header with user profile, logo, and add user button
   const renderHeader = () => {
     // Using POSTS[0].user.profilePic as a placeholder for the current user's profile pic
@@ -816,7 +852,7 @@ export default function SocialScreen() {
           contentContainerStyle={{
             paddingBottom: POST_PEEK_AMOUNT, // Add bottom padding to account for peeking
           }}
-          ListFooterComponent={null}
+          ListFooterComponent={renderFooter}
         />
       </View>
     </View>

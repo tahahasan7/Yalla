@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React from "react";
@@ -156,20 +155,12 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onLongPress }) => {
             <View
               style={[styles.iconContainer, { backgroundColor: goal.color }]}
             >
-              {categoryIcon.icon === "ionicons" ? (
-                <Ionicons
-                  name={(categoryIcon as any).ionIcon}
-                  size={22}
-                  color="#fff"
-                />
-              ) : (
-                <Icon name={categoryIcon.icon} size={22} color="#fff" />
-              )}
+              <Icon name={categoryIcon.icon} size={22} color="#fff" />
             </View>
             <Text style={styles.goalTitle}>{goal.title}</Text>
 
             {/* Flow state indicator for quick status scanning */}
-            <FlowStateIcon flowState={goal.flowState} size={22} />
+            <FlowStateIcon flowState={goal.flowState} size={24} />
           </View>
 
           {goal.completed ? (
@@ -230,7 +221,7 @@ const styles = StyleSheet.create({
   goalCard: {
     borderRadius: 14,
     padding: 16,
-    minHeight: 90, // Ensure consistent height
+    gap: 14,
   },
 
   headerSection: {

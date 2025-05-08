@@ -39,11 +39,10 @@ const FlowStateIconNoBackground = ({
   size?: number;
 }) => {
   return (
-    <View style={{ marginRight: 12 }}>
+    <View style={styles.flowStateIcon}>
       <Icon
         name={flowState.charAt(0).toUpperCase() + flowState.slice(1)}
         size={size}
-        color="#fff"
       />
     </View>
   );
@@ -60,6 +59,7 @@ export default function GoalDetailsScreen() {
   const [showFlowInfo, setShowFlowInfo] = useState(false);
   const [flowInfoPosition, setFlowInfoPosition] = useState({ top: 150 });
   const flowButtonRef = useRef<View>(null);
+  const [isNavigating, setIsNavigating] = useState(false);
 
   // New state variables for the popup modal
   const [selectedDay, setSelectedDay] = useState<Log | null>(null);
@@ -287,6 +287,20 @@ export default function GoalDetailsScreen() {
   const screenWidth = Dimensions.get("window").width;
   const dayItemSize = (screenWidth - 32) / 7; // 7 days per week
 
+  // Add navigation guard to prevent immediate back navigation
+  useEffect(() => {
+    const unsubscribe = navigation.addListener("beforeRemove", (e) => {
+      // If we're navigating to the camera screen and we've just been there
+      if (isNavigating) {
+        // Prevent immediate navigation back to camera
+        e.preventDefault();
+        return;
+      }
+    });
+
+    return unsubscribe;
+  }, [navigation, isNavigating]);
+
   // Function to prepare for high-quality image loading
   const resetImageLoadState = () => {
     setIsHighResLoaded(false);
@@ -502,7 +516,12 @@ export default function GoalDetailsScreen() {
 
   // In goal-details.tsx - Handle camera button press
   const handleCameraPress = () => {
-    // Navigate to the goal-camera screen instead of the camera tab
+    // Prevent rapid navigation
+    if (isNavigating) return;
+
+    setIsNavigating(true);
+
+    // Navigate to the goal-camera screen
     router.push({
       pathname: "/goal-camera",
       params: {
@@ -518,6 +537,11 @@ export default function GoalDetailsScreen() {
         animation: "slide_from_right",
       },
     });
+
+    // Reset navigation lock after a short delay
+    setTimeout(() => {
+      setIsNavigating(false);
+    }, 500);
   };
 
   return (
@@ -554,7 +578,11 @@ export default function GoalDetailsScreen() {
       <View style={styles.headerArea}>
         {/* Header with back button and controls */}
         <View style={styles.headerContainer}>
-          <TouchableOpacity style={styles.backButton} onPress={handleBackPress}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={handleBackPress}
+            hitSlop={{ top: 20, bottom: 0, left: 20, right: 20 }}
+          >
             <Ionicons name="chevron-back" size={24} color="white" />
           </TouchableOpacity>
 
@@ -572,7 +600,7 @@ export default function GoalDetailsScreen() {
               ref={flowButtonRef}
               style={styles.flowStateButton}
               onPress={toggleFlowInfo}
-              hitSlop={{ top: 20, bottom: 20, left: 10, right: 10 }}
+              hitSlop={{ top: 10, bottom: 20, left: 10, right: 10 }}
             >
               <FlowStateIconNoBackground flowState={goal.flowState} size={30} />
               <Text style={styles.flowStateTitle}>{flowStateCapitalized}</Text>
@@ -835,7 +863,7 @@ export default function GoalDetailsScreen() {
 
                     {/* Content column */}
                     <View style={styles.contentColumn}>
-                      <Text style={styles.weekText}>Week 2</Text>
+                      <Text style={styles.weekText}>{item.week}</Text>
 
                       <View style={styles.captionContainer}>
                         <View style={styles.captionHeader}>
@@ -1049,6 +1077,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     alignItems: "flex-start",
     paddingBottom: 18,
+  },
+
+  flowStateIcon: {
+    marginRight: 12,
+    // backgroundColor: "hsla(0, 0.00%, 89.00%, 0.10)",
+    // width: 40,
+    // height: 40,
+    // borderRadius: 20,
+    // justifyContent: "center",
+    // alignItems: "center",
   },
   flowStateRow: {
     flexDirection: "row",

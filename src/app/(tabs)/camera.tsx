@@ -1,8 +1,4 @@
-import {
-  Ionicons,
-  MaterialCommunityIcons,
-  MaterialIcons,
-} from "@expo/vector-icons";
+import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
 import {
   CameraType,
@@ -28,78 +24,15 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Icon } from "../../components/common";
+import FlowStateIcon from "../../components/social/FlowStateIcon";
+import { CATEGORIES, Goal, GOALS } from "../../constants/goalData";
 import { NAVBAR_HEIGHT } from "../../constants/socialData";
 import { DarkTheme, DefaultTheme } from "../../constants/theme";
 import { useColorScheme } from "../../hooks/useColorScheme";
 
 // Get screen dimensions for responsive layout
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-
-// Import Goal interface from goals.tsx
-interface Goal {
-  id: string;
-  title: string;
-  frequency: string;
-  duration: string;
-  color: string;
-  icon: string; // This can be "WorkoutRun", "StudyDesk", or any other icon name
-  flowState: "still" | "kindling" | "flowing" | "glowing";
-  lastImage?: string;
-  lastImageDate?: string;
-  progress?: number;
-  completed?: boolean;
-  completedDate?: string;
-}
-
-// Icons for each flow state
-const flowStateIcons: Record<Goal["flowState"], string> = {
-  still: "water-outline",
-  kindling: "flame-outline",
-  flowing: "water",
-  glowing: "sunny",
-};
-
-// Mock goals data - this would typically come from a context or API
-const GOALS: Goal[] = [
-  {
-    id: "1",
-    title: "Running",
-    frequency: "2 times a week",
-    duration: "15 Days / 7 weeks",
-    color: "#5CBA5A",
-    icon: "WorkoutRun",
-    flowState: "flowing",
-    progress: 65,
-  },
-  {
-    id: "2",
-    title: "Studying",
-    frequency: "4 times a week",
-    duration: "Ongoing",
-    color: "#EB6247",
-    icon: "StudyDesk",
-    flowState: "kindling",
-  },
-  {
-    id: "3",
-    title: "Meditation",
-    frequency: "5 times a week",
-    duration: "24 Days",
-    color: "#4E85DD",
-    icon: "StudyDesk",
-    flowState: "glowing",
-    progress: 30,
-  },
-  {
-    id: "4",
-    title: "Guitar Practice",
-    frequency: "Daily",
-    duration: "30 Days",
-    color: "#8A2BE2",
-    icon: "guitar-acoustic",
-    flowState: "still",
-  },
-];
 
 // Component for each goal item
 const GoalItem = ({
@@ -111,6 +44,17 @@ const GoalItem = ({
   isSelected: boolean;
   onSelect: (goal: Goal) => void;
 }) => {
+  // Get the category icon for the goal
+  const getCategoryIcon = () => {
+    // Find the category in CATEGORIES array
+    const category = CATEGORIES.find((cat) => cat.name === goal.category);
+
+    // If category found, return the icon info, otherwise return a default
+    return category || { name: "Default", icon: goal.icon };
+  };
+
+  const categoryIcon = getCategoryIcon();
+
   return (
     <TouchableOpacity
       style={[
@@ -121,18 +65,7 @@ const GoalItem = ({
       activeOpacity={0.7}
     >
       <View style={[styles.goalIconContainer, { backgroundColor: goal.color }]}>
-        {goal.icon === "WorkoutRun" ? (
-          <MaterialIcons name="directions-run" size={22} color="#fff" />
-        ) : goal.icon === "StudyDesk" ? (
-          <MaterialIcons name="menu-book" size={22} color="#fff" />
-        ) : (
-          <MaterialCommunityIcons
-            // @ts-ignore - icon string is compatible but types aren't matching
-            name={goal.icon}
-            size={22}
-            color="#fff"
-          />
-        )}
+        <Icon name={categoryIcon.icon} size={18} color="#fff" />
       </View>
 
       <View style={styles.goalInfo}>
@@ -141,24 +74,7 @@ const GoalItem = ({
           <Text style={styles.goalFrequency}>{goal.frequency}</Text>
         </View>
       </View>
-
-      <View style={styles.flowStateContainer}>
-        <Ionicons
-          // @ts-ignore - icon name is valid but types don't match
-          name={flowStateIcons[goal.flowState]}
-          size={18}
-          color={goal.color}
-        />
-        <Text style={[styles.flowStateText, { color: goal.color }]}>
-          {goal.flowState.charAt(0).toUpperCase() + goal.flowState.slice(1)}
-        </Text>
-      </View>
-
-      {isSelected && (
-        <View style={styles.selectedIndicator}>
-          <Ionicons name="checkmark-circle" size={22} color={goal.color} />
-        </View>
-      )}
+      <FlowStateIcon flowState={goal.flowState} size={22} />
     </TouchableOpacity>
   );
 };
@@ -185,6 +101,21 @@ export default function GoalCameraScreen() {
   const params = useLocalSearchParams();
   const goalSelectorAnim = useRef(new Animated.Value(0)).current;
   const goalSelectorHeight = useRef(new Animated.Value(0)).current;
+
+  // Get the category icon for the currently selected goal
+  const getSelectedGoalIcon = () => {
+    if (!selectedGoal) return null;
+
+    // Find the category in CATEGORIES array
+    const category = CATEGORIES.find(
+      (cat) => cat.name === selectedGoal.category
+    );
+
+    // Return the category if found, otherwise use the goal's icon as fallback
+    return category;
+  };
+
+  const selectedCategoryIcon = getSelectedGoalIcon();
 
   // Add state for the back button visibility
   const [showBackButton, setShowBackButton] = useState(false); // Changed to false to hide back button
@@ -393,8 +324,6 @@ export default function GoalCameraScreen() {
 
   // Updated function to toggle goal selector with fixed animations
   function toggleGoalSelector() {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
     // Hide music selector if open
     if (showMusicSelector) {
       setShowMusicSelector(false);
@@ -424,12 +353,9 @@ export default function GoalCameraScreen() {
     }
   }
 
-  // Function to select a goal with haptic feedback and animation
+  // Function to select a goal with animation
   function selectGoal(goal: Goal) {
     setSelectedGoal(goal);
-
-    // Play success haptic feedback
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
     // Close selector with animation
     Animated.timing(goalSelectorAnim, {
@@ -540,28 +466,19 @@ export default function GoalCameraScreen() {
                   activeOpacity={0.8}
                 >
                   {selectedGoal ? (
-                    <React.Fragment>
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 20,
+                      }}
+                    >
                       <View style={styles.selectedGoalIcon}>
-                        {selectedGoal.icon === "WorkoutRun" ? (
-                          <MaterialIcons
-                            name="directions-run"
-                            size={18}
-                            color="#fff"
-                          />
-                        ) : selectedGoal.icon === "StudyDesk" ? (
-                          <MaterialIcons
-                            name="menu-book"
-                            size={18}
-                            color="#fff"
-                          />
-                        ) : (
-                          <MaterialCommunityIcons
-                            // @ts-ignore - icon string is compatible but types aren't matching
-                            name={selectedGoal.icon}
-                            size={18}
-                            color="#fff"
-                          />
-                        )}
+                        <Icon
+                          name={selectedCategoryIcon?.icon || selectedGoal.icon}
+                          size={18}
+                          color="#fff"
+                        />
                       </View>
                       <Text style={styles.selectedGoalText}>
                         {selectedGoal.title}
@@ -571,9 +488,11 @@ export default function GoalCameraScreen() {
                         size={16}
                         color="#fff"
                       />
-                    </React.Fragment>
+                    </View>
                   ) : (
-                    <React.Fragment>
+                    <View
+                      style={{ flexDirection: "row", alignItems: "center" }}
+                    >
                       <Ionicons name="flag-outline" size={18} color="white" />
                       <Text style={styles.goalSelectorButtonText}>
                         Select Goal
@@ -583,7 +502,7 @@ export default function GoalCameraScreen() {
                         size={16}
                         color="white"
                       />
-                    </React.Fragment>
+                    </View>
                   )}
                 </TouchableOpacity>
               </View>
@@ -655,7 +574,7 @@ export default function GoalCameraScreen() {
                 </Text>
 
                 <FlatList
-                  data={GOALS}
+                  data={GOALS.filter((goal) => !goal.completed)}
                   keyExtractor={(item) => item.id}
                   renderItem={({ item }) => (
                     <GoalItem
@@ -853,15 +772,11 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginHorizontal: 8,
   },
-  selectedGoalIcon: {
-    marginRight: 8,
-  },
+  selectedGoalIcon: {},
   selectedGoalText: {
     color: "#fff",
     fontSize: 14,
     fontWeight: "600",
-    marginRight: 8,
-    flex: 1,
   },
   goalSelectorContainer: {
     position: "absolute",
