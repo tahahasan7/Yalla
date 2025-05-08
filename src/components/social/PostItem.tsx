@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
@@ -15,6 +16,7 @@ import { FontFamily } from "../../constants/fonts";
 import { Post } from "../../types/social";
 import { Icon } from "../common";
 import HeartParticles from "./animations/HeartParticles";
+import SurpriseParticles from "./animations/SurpriseParticles";
 import FlowStateIcon from "./FlowStateIcon";
 import MusicPlayerBottomSheet from "./MusicPlayerBottomSheet";
 
@@ -39,16 +41,34 @@ const PostItem = ({
   scrollY,
   itemHeight,
   headerAnimation,
-  isLiked,
-  showParticles,
+  isLiked: initialIsLiked,
+  showParticles: initialShowParticles,
   musicPlayerAnim,
   musicPlayerExpanded,
-  handleLike,
+  handleLike: parentHandleLike,
   handleDoubleTap,
   toggleMusicPlayer,
 }: PostItemProps) => {
+  // Local state to manage like/surprise state
+  const [isLiked, setIsLiked] = useState(initialIsLiked);
+  const [showHeartParticles, setShowHeartParticles] =
+    useState(initialShowParticles);
   // State for the music player bottom sheet
   const [musicBottomSheetVisible, setMusicBottomSheetVisible] = useState(false);
+  // State for surprise particles
+  const [showSurpriseParticles, setShowSurpriseParticles] = useState(false);
+  // State for surprise button active state
+  const [isSurprised, setIsSurprised] = useState(false);
+
+  // Animation values for button scaling
+  const surpriseScale = useRef(new Animated.Value(1)).current;
+  const likeScale = useRef(new Animated.Value(1)).current;
+
+  // Update local state when parent state changes
+  useEffect(() => {
+    setIsLiked(initialIsLiked);
+    setShowHeartParticles(initialShowParticles);
+  }, [initialIsLiked, initialShowParticles]);
 
   // Heartbeat animation for music cover
   const musicCoverScale = useRef(new Animated.Value(1)).current;
@@ -58,42 +78,36 @@ const PostItem = ({
     const startHeartbeatAnimation = () => {
       // Create sequence for heartbeat effect with more variation
       Animated.sequence([
-        // First beat - stronger pulse (higher peak)
         Animated.timing(musicCoverScale, {
           toValue: 1.22,
-          duration: 150, // Faster
-          easing: Easing.out(Easing.cubic), // More pronounced curve
+          duration: 150,
+          easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
-        // Quick sharp contraction (slightly below normal)
         Animated.timing(musicCoverScale, {
-          toValue: 0.95, // Go below normal size for more dramatic effect
-          duration: 120, // Faster
+          toValue: 0.95,
+          duration: 120,
           easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
         }),
-        // Second beat - medium pulse
         Animated.timing(musicCoverScale, {
           toValue: 1.13,
-          duration: 140, // Faster
+          duration: 140,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
-        // Contraction
         Animated.timing(musicCoverScale, {
-          toValue: 0.98, // Slight undershoot
-          duration: 110, // Faster
+          toValue: 0.98,
+          duration: 110,
           easing: Easing.in(Easing.cubic),
           useNativeDriver: true,
         }),
-        // Third quick beat - smaller pulse
         Animated.timing(musicCoverScale, {
           toValue: 1.07,
-          duration: 100, // Even faster
+          duration: 100,
           easing: Easing.out(Easing.cubic),
           useNativeDriver: true,
         }),
-        // Back to normal
         Animated.timing(musicCoverScale, {
           toValue: 1,
           duration: 100,
@@ -101,54 +115,46 @@ const PostItem = ({
           useNativeDriver: true,
         }),
       ]).start(() => {
-        // Shorter pause between beats
         setTimeout(() => {
           startHeartbeatAnimation();
-        }, 850); // Shorter pause for faster overall rhythm
+        }, 850);
       });
     };
 
-    // Start the animation
     startHeartbeatAnimation();
-
-    // Cleanup animation when component unmounts
     return () => {
       musicCoverScale.stopAnimation();
     };
   }, []);
 
-  // Wider input range for smoother transitions
+  // Animation interpolation for scroll effects
   const inputRange = [
     (index - 1) * itemHeight,
     index * itemHeight,
     (index + 1) * itemHeight,
   ];
 
-  // Keep only opacity animation for visibility
   const opacity = scrollY.interpolate({
     inputRange,
     outputRange: [0.8, 1, 0.8],
     extrapolate: "clamp",
   });
 
-  // Enhanced parallax effect for background image to be more dramatic
   const imageTranslateY = scrollY.interpolate({
     inputRange,
     outputRange: [-20, 0, 20],
     extrapolate: "clamp",
   });
 
-  // Add horizontal parallax for more depth
   const imageTranslateX = scrollY.interpolate({
     inputRange,
     outputRange: [7, 0, -7],
     extrapolate: "clamp",
   });
 
-  // Music player expansion animation with spring effect
   const musicPlayerHeight = musicPlayerAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [50, 120], // Larger expansion
+    outputRange: [50, 120],
   });
 
   const musicInfoOpacity = musicPlayerAnim.interpolate({
@@ -156,16 +162,79 @@ const PostItem = ({
     outputRange: [0, 0, 1],
   });
 
-  // Handle opening the music player bottom sheet
+  // Open/close bottom sheet handlers
   const handleOpenMusicBottomSheet = () => {
     setMusicBottomSheetVisible(true);
-    // Also call the provided toggle function to maintain any parent state
     toggleMusicPlayer(item.id);
   };
 
-  // Handle closing the music player bottom sheet
   const handleCloseMusicBottomSheet = () => {
     setMusicBottomSheetVisible(false);
+  };
+
+  // Button press animation function
+  const animateButtonPress = (scale: Animated.Value) => {
+    Animated.sequence([
+      Animated.timing(scale, {
+        toValue: 1.4,
+        duration: 150,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scale, {
+        toValue: 0.9,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scale, {
+        toValue: 1.1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+      Animated.timing(scale, {
+        toValue: 1,
+        duration: 100,
+        useNativeDriver: true,
+      }),
+    ]).start();
+  };
+
+  // Handle like button press - haptic only when liking
+  const handleLike = (postId: string) => {
+    const newLikeState = !isLiked;
+    setIsLiked(newLikeState);
+
+    // Turn off surprised if now liking
+    if (newLikeState && isSurprised) {
+      setIsSurprised(false);
+    }
+
+    if (newLikeState) {
+      setShowHeartParticles(true);
+      // Haptic feedback only on like
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      animateButtonPress(likeScale);
+      setTimeout(() => setShowHeartParticles(false), 1000);
+    }
+
+    parentHandleLike(postId);
+  };
+
+  // Handle surprise button press (unchanged)
+  const handleSurprisePress = () => {
+    const newSurprisedState = !isSurprised;
+    setIsSurprised(newSurprisedState);
+
+    if (newSurprisedState && isLiked) {
+      setIsLiked(false);
+      parentHandleLike(item.id);
+    }
+
+    if (newSurprisedState) {
+      setShowSurpriseParticles(true);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      animateButtonPress(surpriseScale);
+      setTimeout(() => setShowSurpriseParticles(false), 1000);
+    }
   };
 
   return (
@@ -176,8 +245,6 @@ const PostItem = ({
           {
             height: itemHeight,
             opacity: opacity,
-            // Removed scale and translateY animations
-            // Fixed border radius instead of animated
             borderRadius: 20,
           },
         ]}
@@ -190,7 +257,7 @@ const PostItem = ({
             {
               transform: [
                 { translateY: imageTranslateY },
-                { translateX: imageTranslateX }, // Added horizontal parallax
+                { translateX: imageTranslateX },
               ],
             },
           ]}
@@ -326,7 +393,7 @@ const PostItem = ({
                   style={{
                     transform: [
                       {
-                        scale: isLiked ? headerAnimation : 1,
+                        scale: likeScale,
                       },
                     ],
                   }}
@@ -337,18 +404,35 @@ const PostItem = ({
                     size={24}
                   />
                 </Animated.View>
-                <HeartParticles visible={showParticles} />
+                <HeartParticles visible={showHeartParticles} />
               </TouchableOpacity>
 
-              {/* Enhanced Share Button */}
+              {/* Enhanced Surprise Button with Surprise Particles */}
               <TouchableOpacity
-                style={styles.shareButton}
-                onPress={() => {
-                  // Placeholder for share action
-                }}
-                hitSlop={10}
+                style={[
+                  styles.shareButton,
+                  isSurprised && styles.surpriseButtonActive,
+                ]}
+                onPress={handleSurprisePress}
+                activeOpacity={0.7}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
-                <Icon name="Surprise" color="white" size={24} />
+                <Animated.View
+                  style={{
+                    transform: [
+                      {
+                        scale: surpriseScale,
+                      },
+                    ],
+                  }}
+                >
+                  <Icon
+                    name="Surprise"
+                    color={isSurprised ? "#5856D6" : "white"}
+                    size={24}
+                  />
+                </Animated.View>
+                <SurpriseParticles visible={showSurpriseParticles} />
               </TouchableOpacity>
             </View>
           </Animated.View>
@@ -390,12 +474,12 @@ const styles = StyleSheet.create({
     elevation: 15,
   },
   postImage: {
-    width: "120%", // Slightly wider to ensure no empty space during parallax
-    height: "120%", // Slightly taller to ensure no empty space during parallax
+    width: "120%",
+    height: "120%",
     position: "absolute",
     backgroundColor: "#000",
-    left: "-10%", // Offset the extra width to center the image
-    top: "-10%", // Offset the extra height to center the image
+    left: "-10%",
+    top: "-10%",
   },
   overlayContainer: {
     ...StyleSheet.absoluteFillObject,
@@ -611,6 +695,15 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 8,
   },
+  surpriseButtonActive: {
+    shadowColor: "#5856D6",
+    shadowOffset: {
+      width: 0,
+      height: 0,
+    },
+    shadowOpacity: 0.8,
+    shadowRadius: 15,
+  },
   menuIconButton: {
     width: 38,
     height: 38,
@@ -671,4 +764,5 @@ const styles = StyleSheet.create({
     textShadowRadius: 3,
   },
 });
+
 export default PostItem;
