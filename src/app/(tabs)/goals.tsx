@@ -1,9 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
-import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React, { useState } from "react";
 import {
-  Animated,
   FlatList,
   Image,
   StatusBar,
@@ -13,270 +11,15 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Icon } from "../../components/common";
-import GoalBottomSheet from "../../components/goals/GoalBottomSheet";
-import FlowStateIcon from "../../components/social/FlowStateIcon";
+import GoalBottomSheet from "../../components/goals/bottomSheets/GoalBottomSheet";
+import GoalCard from "../../components/goals/GoalCard";
 import { FontFamily } from "../../constants/fonts";
+import { GOALS, GOAL_TABS, Goal } from "../../constants/goalData";
 import { DarkTheme, DefaultTheme } from "../../constants/theme";
 import { useColorScheme } from "../../hooks/useColorScheme";
 
-// Define Goal type
-interface Goal {
-  id: string;
-  title: string;
-  frequency: string;
-  duration: string;
-  color: string;
-  icon: string;
-  flowState: "still" | "kindling" | "flowing" | "glowing";
-  lastImage?: string; // URL of the last uploaded image
-  lastImageDate?: string; // Date when the last image was added
-  progress?: number; // Progress percentage
-  completed?: boolean; // Whether the goal is completed
-  completedDate?: string; // Date when the goal was completed
-}
-
-// Mock data for goals
-const GOALS: Goal[] = [
-  {
-    id: "1",
-    title: "Running",
-    frequency: "2 times a week",
-    duration: "15 Days / 7 weeks",
-    color: "#5CBA5A",
-    icon: "WorkoutRun",
-    flowState: "flowing",
-    lastImage:
-      "https://images.unsplash.com/photo-1571008887538-b36bb32f4571?q=80&w=1470&auto=format&fit=crop",
-    lastImageDate: "2 days ago",
-    progress: 65,
-  },
-  {
-    id: "2",
-    title: "Studying",
-    frequency: "4 times a week",
-    duration: "Ongoing",
-    color: "#EB6247",
-    icon: "StudyDesk",
-    flowState: "kindling",
-    lastImage:
-      "https://images.unsplash.com/photo-1588702547923-7093a6c3ba33?q=80&w=1470&auto=format&fit=crop",
-    lastImageDate: "Yesterday",
-  },
-  {
-    id: "3",
-    title: "Meditation",
-    frequency: "5 times a week",
-    duration: "24 Days",
-    color: "#4E85DD",
-    icon: "StudyDesk",
-    flowState: "glowing",
-    lastImage:
-      "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?q=80&w=1373&auto=format&fit=crop",
-    lastImageDate: "5 hours ago",
-    progress: 30,
-  },
-  {
-    id: "4",
-    title: "Reading",
-    frequency: "3 times a week",
-    duration: "Ongoing",
-    color: "#9668D9",
-    icon: "StudyDesk",
-    flowState: "still",
-  },
-  {
-    id: "5",
-    title: "Guitar Practice",
-    frequency: "3 times a week",
-    duration: "30 Days challenge",
-    color: "#FF9F45",
-    icon: "WorkoutRun",
-    flowState: "flowing",
-    completed: true,
-    completedDate: "April 28, 2025",
-    progress: 100,
-  },
-];
-
 // Modified Tab options - rearranged with "Completed" at the end
-const TABS = [
-  { id: "all", title: "All" },
-  { id: "solo", title: "Solo" },
-  { id: "group", title: "Group" },
-  { id: "completed", title: "Completed" },
-];
-
-// Goal card component props
-interface GoalCardProps {
-  goal: Goal;
-  onLongPress: (goal: Goal) => void;
-}
-
-// Simplified Goal card component
-const GoalCard: React.FC<GoalCardProps> = ({ goal, onLongPress }) => {
-  // Animation for press feedback
-  const animatedScale = React.useRef(new Animated.Value(1)).current;
-  const animatedOpacity = React.useRef(new Animated.Value(1)).current;
-
-  // Use provided progress or calculate a random percentage
-  const progressPercentage =
-    goal.progress || Math.floor(Math.random() * 85) + 15;
-
-  // Determine if the goal has an end date
-  const hasEndDate =
-    goal.duration.toLowerCase().includes("days") ||
-    goal.duration.toLowerCase().includes("weeks");
-
-  // Extract end date information
-  const getEndDateText = () => {
-    if (goal.duration.includes("Days")) {
-      const daysMatch = goal.duration.match(/(\d+)\s*Days/);
-      if (daysMatch && daysMatch[1]) {
-        return `Ends in ${daysMatch[1]} days`;
-      }
-    }
-    if (goal.duration.includes("weeks")) {
-      const weeksMatch = goal.duration.match(/(\d+)\s*weeks/);
-      if (weeksMatch && weeksMatch[1]) {
-        return `Ends in ${weeksMatch[1]} weeks`;
-      }
-    }
-    return goal.duration;
-  };
-
-  // Inside GoalCard component in goals.tsx
-  const handleGoalPress = () => {
-    // Navigate to the goal details screen with the goal data
-    router.push({
-      pathname: "/goal-details",
-      params: {
-        id: goal.id,
-        title: goal.title,
-        frequency: goal.frequency,
-        duration: goal.duration,
-        color: goal.color,
-        icon: goal.icon,
-        flowState: goal.flowState,
-        lastImage: goal.lastImage,
-        lastImageDate: goal.lastImageDate,
-        progress: goal.progress?.toString(),
-        completed: goal.completed ? "true" : "false",
-        completedDate: goal.completedDate,
-      },
-    });
-  };
-  const handleLongPress = () => {
-    // Trigger haptic feedback
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    // Animate the card when long pressed
-    Animated.parallel([
-      Animated.timing(animatedScale, {
-        toValue: 0.96,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.timing(animatedOpacity, {
-        toValue: 0.8,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      // Call the passed callback
-      onLongPress(goal);
-
-      // Reset the animation
-      Animated.parallel([
-        Animated.timing(animatedScale, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(animatedOpacity, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-      ]).start();
-    });
-  };
-
-  return (
-    <Animated.View
-      style={{
-        transform: [{ scale: animatedScale }],
-        opacity: animatedOpacity,
-      }}
-    >
-      <TouchableOpacity
-        activeOpacity={0.9}
-        onPress={handleGoalPress}
-        onLongPress={handleLongPress}
-        delayLongPress={500} // Half a second for long press
-        style={styles.goalCardWrapper}
-      >
-        <View
-          style={[
-            styles.goalCard,
-            { backgroundColor: "#1F1F1F" },
-            goal.completed && styles.completedGoalCard,
-          ]}
-        >
-          {/* Icon and Title */}
-          <View style={styles.headerSection}>
-            <View
-              style={[styles.iconContainer, { backgroundColor: goal.color }]}
-            >
-              <Icon name={goal.icon} size={22} color="#fff" />
-            </View>
-            <Text style={styles.goalTitle}>{goal.title}</Text>
-
-            {/* Flow state indicator for quick status scanning */}
-            <FlowStateIcon flowState={goal.flowState} size={22} />
-          </View>
-
-          {goal.completed ? (
-            // Completed goal information
-            <View style={styles.completedContainer}>
-              <View style={{ flex: 1 }}></View>
-              <View style={styles.completedBadge}>
-                <Text style={styles.completedText}>Completed</Text>
-              </View>
-            </View>
-          ) : hasEndDate ? (
-            // Progress bar for goals with end dates
-            <View>
-              <View style={styles.progressLabelContainer}>
-                <Text style={styles.progressLabel}>{getEndDateText()}</Text>
-                <Text style={styles.progressText}>{progressPercentage}%</Text>
-              </View>
-              <View style={styles.progressBarContainer}>
-                <View style={styles.progressBar}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      { width: `${progressPercentage}%` },
-                    ]}
-                  />
-                </View>
-              </View>
-            </View>
-          ) : (
-            // Info display for ongoing goals without end dates
-            <View style={styles.ongoingContainer}>
-              <View style={styles.ongoingInfoRow}>
-                <Text style={styles.ongoingInfoText}>
-                  {goal.frequency} • {goal.duration}
-                </Text>
-              </View>
-            </View>
-          )}
-        </View>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-};
+const TABS = GOAL_TABS;
 
 export default function GoalsScreen() {
   const colorScheme = useColorScheme();
@@ -295,13 +38,13 @@ export default function GoalsScreen() {
         return GOALS.filter((goal) => goal.completed);
       case "solo":
         // Placeholder for solo goals filtering
-        return GOALS;
+        return GOALS.filter((goal) => !goal.completed);
       case "group":
         // Placeholder for group goals filtering
-        return GOALS;
+        return GOALS.filter((goal) => !goal.completed);
       case "all":
       default:
-        return GOALS;
+        return GOALS.filter((goal) => !goal.completed);
     }
   }, [activeTab]);
 
@@ -362,7 +105,10 @@ export default function GoalsScreen() {
           </TouchableOpacity>
 
           {/* Add button */}
-          <TouchableOpacity style={styles.addButton}>
+          <TouchableOpacity
+            style={styles.addButton}
+            onPress={() => router.push("/create-goal")}
+          >
             <Ionicons name="add" size={24} color="black" />
           </TouchableOpacity>
         </View>
@@ -443,7 +189,7 @@ export default function GoalsScreen() {
                   activeTab === TABS[3].id && styles.activeTabText,
                 ]}
               >
-                Done
+                Completed
               </Text>
             </TouchableOpacity>
           </View>
@@ -588,146 +334,5 @@ const styles = StyleSheet.create({
   goalsList: {
     paddingTop: 10,
     paddingBottom: 80,
-  },
-
-  // Updated card styles for vertical layout
-  goalCardWrapper: {
-    width: "100%", // Full width for single column
-    marginBottom: 12, // Spacing between cards
-    borderRadius: 14,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-
-  goalCard: {
-    borderRadius: 14,
-    padding: 16,
-    minHeight: 90, // Ensure consistent height
-  },
-
-  headerSection: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-
-  iconContainer: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(255, 255, 255, 0.15)",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 10,
-  },
-
-  goalTitle: {
-    flex: 1,
-    fontSize: 16,
-    fontFamily: FontFamily.SemiBold,
-    color: "white",
-  },
-
-  progressBarContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  progressBar: {
-    flex: 1,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    overflow: "hidden",
-  },
-
-  progressFill: {
-    height: "100%",
-    borderRadius: 3,
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
-  },
-
-  progressText: {
-    fontSize: 12,
-    fontFamily: FontFamily.SemiBold,
-    color: "white",
-    marginLeft: 8,
-    minWidth: 30,
-    textAlign: "right",
-  },
-
-  // New styles for ongoing goals
-  ongoingContainer: {
-    width: "100%",
-  },
-
-  ongoingInfoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    width: "100%",
-  },
-
-  ongoingInfoText: {
-    fontSize: 12,
-    fontFamily: FontFamily.Medium,
-    color: "white",
-    opacity: 0.9,
-  },
-
-  streakText: {
-    fontSize: 12,
-    fontFamily: FontFamily.SemiBold,
-    color: "white",
-    marginLeft: 8,
-  },
-
-  // Styles for progress label
-  progressLabelContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 4,
-  },
-
-  progressLabel: {
-    fontSize: 12,
-    fontFamily: FontFamily.Medium,
-    color: "white",
-    opacity: 0.9,
-  },
-
-  // Styles for completed goals
-  completedGoalCard: {
-    opacity: 0.8,
-  },
-
-  completedContainer: {
-    flexDirection: "row",
-    justifyContent: "flex-end",
-    alignItems: "center",
-  },
-
-  completedBadge: {
-    backgroundColor: "rgba(255, 255, 255, 0.3)",
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 10,
-  },
-
-  completedText: {
-    color: "white",
-    fontSize: 12,
-    fontFamily: FontFamily.Regular,
-  },
-
-  completedDate: {
-    fontSize: 12,
-    fontFamily: FontFamily.Medium,
-    color: "white",
-    opacity: 0.8,
   },
 });

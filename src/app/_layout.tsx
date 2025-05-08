@@ -63,6 +63,16 @@ export default function RootLayout() {
           }}
         />
 
+        {/* Modal group - special modal presentation */}
+        <Stack.Screen
+          name="(modals)"
+          options={{
+            headerShown: false,
+            // This ensures modal presentation
+            presentation: "transparentModal",
+          }}
+        />
+
         {/* Goal details screen with dynamic animation */}
         <Stack.Screen
           name="goal-details"

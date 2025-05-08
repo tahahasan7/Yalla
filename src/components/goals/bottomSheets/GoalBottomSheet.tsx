@@ -1,280 +1,12 @@
-// DeleteSwipeButton - A component that handles the swipe-to-delete interaction
-interface DeleteSwipeButtonProps {
-  onDelete: () => void;
-  goalTitle: string;
-}
-
-const DeleteSwipeButton = ({ onDelete, goalTitle }: DeleteSwipeButtonProps) => {
-  // State to track component status
-  const [isConfirming, setIsConfirming] = useState(false);
-  const [isPlayingHint, setIsPlayingHint] = useState(false);
-
-  // Single Animation values with consistent useNativeDriver settings
-  const translateX = useRef(new Animated.Value(0)).current;
-
-  // Use state for color changes instead of animations
-  const [bgColor, setBgColor] = useState("#2A2A2A");
-
-  // Animation references for cancellation
-  const hintAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
-
-  // Width to determine when a swipe is considered complete
-  const SWIPE_THRESHOLD = 120;
-  const MAX_SWIPE = 200;
-
-  // Clean up animations on unmount
-  useEffect(() => {
-    return () => {
-      if (hintAnimationRef.current) {
-        hintAnimationRef.current.stop();
-      }
-    };
-  }, []);
-
-  // Function to play a single hint animation
-  const playHintAnimation = () => {
-    // Already playing, don't restart
-    if (isPlayingHint) return;
-
-    // Provide subtle haptic feedback only for the hint tap
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-    // Set playing hint state
-    setIsPlayingHint(true);
-
-    // Reset any existing animations
-    translateX.setValue(0);
-
-    // Create a single hint animation
-    const hintSequence = Animated.sequence([
-      // First movement right
-      Animated.timing(translateX, {
-        toValue: 30,
-        duration: 400,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.ease),
-      }),
-      // Back to start
-      Animated.timing(translateX, {
-        toValue: 0,
-        duration: 300,
-        useNativeDriver: true,
-        easing: Easing.in(Easing.ease),
-      }),
-      // Second movement right
-      Animated.timing(translateX, {
-        toValue: 25,
-        duration: 350,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.ease),
-      }),
-      // Back to start
-      Animated.timing(translateX, {
-        toValue: 0,
-        duration: 250,
-        useNativeDriver: true,
-        easing: Easing.in(Easing.ease),
-      }),
-    ]);
-
-    // Store reference and start
-    hintAnimationRef.current = hintSequence;
-
-    // Play animation and clear when done
-    hintSequence.start(({ finished }) => {
-      if (finished) {
-        setIsPlayingHint(false);
-        hintAnimationRef.current = null;
-      }
-    });
-  };
-
-  // Stop the hint animation
-  const stopHintAnimation = () => {
-    if (hintAnimationRef.current) {
-      hintAnimationRef.current.stop();
-      hintAnimationRef.current = null;
-    }
-
-    setIsPlayingHint(false);
-
-    // Reset position
-    Animated.spring(translateX, {
-      toValue: 0,
-      friction: 6,
-      tension: 40,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  // Handle regular tap
-  const handleTap = () => {
-    if (isConfirming) return;
-
-    // Play hint animation regardless of current state
-    // If already playing, it will be ignored in the playHintAnimation function
-    playHintAnimation();
-  };
-
-  // Configure swipe gesture handler
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => !isConfirming,
-      onMoveShouldSetPanResponder: (_, gestureState) => {
-        // Only respond to horizontal movements that are definitely swipes
-        return !isConfirming && Math.abs(gestureState.dx) > 10;
-      },
-      onPanResponderGrant: () => {
-        // Stop any running hint animations when user starts to actually swipe
-        stopHintAnimation();
-
-        // Reset any running animations on touch
-        translateX.stopAnimation();
-      },
-      onPanResponderMove: (_, gestureState) => {
-        if (isConfirming) return;
-
-        if (gestureState.dx > 0) {
-          // Only allow rightward swipes (positive dx)
-          const newX = Math.min(MAX_SWIPE, gestureState.dx);
-          translateX.setValue(newX);
-
-          // Update background color based on swipe progress
-          const progress = Math.min(1, newX / SWIPE_THRESHOLD);
-          if (progress < 0.3) {
-            setBgColor("#2A2A2A");
-          } else if (progress < 0.7) {
-            setBgColor("#C15144");
-          } else {
-            setBgColor("#EB6247");
-          }
-
-          // No haptic feedback during swipe
-        }
-      },
-      onPanResponderRelease: (_, gestureState) => {
-        if (isConfirming) return;
-
-        // Check if this was a tap rather than a swipe
-        const isTap =
-          Math.abs(gestureState.dx) < 5 && Math.abs(gestureState.dy) < 5;
-
-        if (isTap) {
-          // Handle as a tap
-          handleTap();
-          return;
-        }
-
-        if (gestureState.dx > SWIPE_THRESHOLD) {
-          // Swipe completed, show confirmation
-          setIsConfirming(true);
-          setBgColor("#EB6247");
-
-          // Animate to full swipe with native driver
-          Animated.spring(translateX, {
-            toValue: MAX_SWIPE,
-            friction: 8,
-            tension: 40,
-            useNativeDriver: true,
-          }).start();
-
-          // Very subtle success notification when swipe completes successfully
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-
-          // Show confirmation dialog
-          setTimeout(() => {
-            Alert.alert(
-              "Delete Goal",
-              `Are you sure you want to delete "${goalTitle}"?`,
-              [
-                {
-                  text: "Cancel",
-                  style: "cancel",
-                  onPress: () => resetSwipe(),
-                },
-                {
-                  text: "Delete",
-                  style: "destructive",
-                  onPress: () => {
-                    resetSwipe();
-                    onDelete();
-                  },
-                },
-              ]
-            );
-          }, 300);
-        } else {
-          // Not swiped far enough, reset
-          resetSwipe();
-        }
-      },
-    })
-  ).current;
-
-  // Reset the swipe position
-  const resetSwipe = () => {
-    setIsConfirming(false);
-    stopHintAnimation();
-    setBgColor("#2A2A2A");
-
-    Animated.spring(translateX, {
-      toValue: 0,
-      friction: 6,
-      tension: 40,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  return (
-    <View
-      style={[styles.swipeButtonContainer, { backgroundColor: bgColor }]}
-      {...panResponder.panHandlers}
-    >
-      {/* Tap overlay for handling taps without interfering with swipes */}
-      <TouchableWithoutFeedback onPress={handleTap}>
-        <View style={styles.tapOverlay} />
-      </TouchableWithoutFeedback>
-
-      {/* Stationary trash icon */}
-      {!isConfirming && (
-        <View style={styles.trashIconBackground}>
-          <Ionicons name="trash" size={24} color="#fff" />
-        </View>
-      )}
-
-      {/* Button content that moves when swiping */}
-      <Animated.View
-        style={[
-          styles.swipeContent,
-          {
-            transform: [{ translateX }],
-          },
-        ]}
-      >
-        <View style={styles.deleteIconRight}>
-          <Ionicons name="trash" size={22} color="#fff" />
-        </View>
-        <Text style={styles.deleteText}>
-          {isConfirming ? "Confirming..." : "Swipe right to delete"}
-        </Text>
-        {!isConfirming && (
-          <View style={styles.swipeArrowContainer}>
-            <Ionicons
-              name="arrow-forward"
-              size={18}
-              color="rgba(255, 255, 255, 0.6)"
-            />
-          </View>
-        )}
-      </Animated.View>
-    </View>
-  );
-};
+import { Icon } from "@/components/common";
+import DeleteButton from "@/components/goals/bottomSheets/DeleteButton";
+import FlowStateIcon from "@/components/social/FlowStateIcon";
+import { FontFamily } from "@/constants/fonts";
+import { CATEGORIES, Goal } from "@/constants/goalData";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Animated,
   Dimensions,
   Easing,
@@ -286,27 +18,8 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import { Icon } from "../../components/common";
-import FlowStateIcon from "../../components/social/FlowStateIcon";
-import { FontFamily } from "../../constants/fonts";
 
 const { height } = Dimensions.get("window");
-
-// Interface for the Goal object, matching the one from GoalsScreen
-interface Goal {
-  id: string;
-  title: string;
-  frequency: string;
-  duration: string;
-  color: string;
-  icon: string;
-  flowState: "still" | "kindling" | "flowing" | "glowing";
-  lastImage?: string;
-  lastImageDate?: string;
-  progress?: number;
-  completed?: boolean;
-  completedDate?: string;
-}
 
 interface GoalBottomSheetProps {
   visible: boolean;
@@ -326,6 +39,17 @@ const GoalBottomSheet = ({ visible, onClose, goal }: GoalBottomSheetProps) => {
   const [isCompleted, setIsCompleted] = useState<boolean>(
     goal.completed || false
   );
+
+  // Get the category icon for the goal
+  const getCategoryIcon = () => {
+    // Find the category in CATEGORIES array
+    const category = CATEGORIES.find((cat) => cat.name === goal.category);
+
+    // If category found, return the icon info, otherwise return a default
+    return category || { name: "Default", icon: goal.icon };
+  };
+
+  const categoryIcon = getCategoryIcon();
 
   // Update local state when goal prop changes
   useEffect(() => {
@@ -495,7 +219,15 @@ const GoalBottomSheet = ({ visible, onClose, goal }: GoalBottomSheetProps) => {
             {/* Goal Header with Color */}
             <View style={[styles.goalHeader, { backgroundColor: goal.color }]}>
               <View style={styles.goalIconContainer}>
-                <Icon name={goal.icon} size={24} color="#fff" />
+                {categoryIcon.icon === "ionicons" ? (
+                  <Ionicons
+                    name={(categoryIcon as any).ionIcon}
+                    size={24}
+                    color="#fff"
+                  />
+                ) : (
+                  <Icon name={categoryIcon.icon} size={24} color="#fff" />
+                )}
               </View>
               <View style={styles.goalTitleContainer}>
                 <Text style={styles.goalTitle}>{goal.title}</Text>
@@ -539,9 +271,9 @@ const GoalBottomSheet = ({ visible, onClose, goal }: GoalBottomSheetProps) => {
               {/* Delete Button with swipe gesture - uses PanResponder for swiping */}
               <View style={styles.deleteButtonRow}>
                 <View style={styles.deleteSwipeContainer}>
-                  <DeleteSwipeButton
+                  <DeleteButton
                     onDelete={() => handleAction("delete")}
-                    goalTitle={goal.title}
+                    itemTitle={goal.title}
                   />
                 </View>
               </View>
@@ -692,56 +424,6 @@ const styles = StyleSheet.create({
     height: 54,
     overflow: "hidden",
     borderRadius: 12,
-  },
-  swipeButtonContainer: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: "#2A2A2A",
-    borderRadius: 12,
-    overflow: "hidden",
-    position: "relative",
-  },
-  swipeContent: {
-    width: "100%",
-    height: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 16,
-    justifyContent: "flex-start",
-    backgroundColor: "#2A2A2A",
-    borderRadius: 12,
-  },
-  tapOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "transparent",
-    zIndex: 5,
-  },
-  swipeArrowContainer: {
-    marginLeft: 8,
-    opacity: 0.8,
-  },
-  trashIconBackground: {
-    position: "absolute",
-    right: 20,
-    top: 0,
-    bottom: 0,
-    justifyContent: "center",
-    alignItems: "center",
-    zIndex: 0,
-  },
-  deleteIconRight: {
-    marginRight: 12,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#EB6247",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  deleteText: {
-    fontFamily: FontFamily.Medium,
-    fontSize: 14,
-    color: "#FFFFFF",
   },
   actionButtonIcon: {
     width: 36,

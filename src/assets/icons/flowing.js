@@ -1,7 +1,10 @@
 import React from "react";
 import Svg, { Defs, LinearGradient, Path, Stop } from "react-native-svg";
 
-const Flowing = ({ size = 29, ...props }) => {
+const Flowing = ({ color = "#50B2FE", size = 29, ...props }) => {
+  // Use default blue gradient unless a different color is specified
+  const useCustomColor = color !== "#50B2FE";
+
   return (
     <Svg width={size} height={size} viewBox="0 0 29 29" fill="none" {...props}>
       <Defs>
@@ -13,8 +16,8 @@ const Flowing = ({ size = 29, ...props }) => {
           y2="25.9803"
           gradientUnits="userSpaceOnUse"
         >
-          <Stop stopColor="#0061E9" />
-          <Stop offset="1" stopColor="#50B2FE" />
+          <Stop stopColor={useCustomColor ? color : "#0061E9"} />
+          <Stop offset="1" stopColor={useCustomColor ? color : "#50B2FE"} />
         </LinearGradient>
         <LinearGradient
           id="paint1_linear_305_911"
@@ -24,8 +27,8 @@ const Flowing = ({ size = 29, ...props }) => {
           y2="22.3532"
           gradientUnits="userSpaceOnUse"
         >
-          <Stop stopColor="#0061E9" />
-          <Stop offset="1" stopColor="#50B2FE" />
+          <Stop stopColor={useCustomColor ? color : "#0061E9"} />
+          <Stop offset="1" stopColor={useCustomColor ? color : "#50B2FE"} />
         </LinearGradient>
         <LinearGradient
           id="paint2_linear_305_911"
@@ -35,8 +38,8 @@ const Flowing = ({ size = 29, ...props }) => {
           y2="22.3532"
           gradientUnits="userSpaceOnUse"
         >
-          <Stop stopColor="#0061E9" />
-          <Stop offset="1" stopColor="#50B2FE" />
+          <Stop stopColor={useCustomColor ? color : "#0061E9"} />
+          <Stop offset="1" stopColor={useCustomColor ? color : "#50B2FE"} />
         </LinearGradient>
       </Defs>
       <Path

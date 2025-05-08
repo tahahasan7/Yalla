@@ -27,6 +27,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon } from "../components/common";
 import { FontFamily } from "../constants/fonts";
 import { useColorScheme } from "../hooks/useColorScheme";
+// Import the goals data
+import { GOALS, Log } from "../constants/goalData";
 
 // Custom flow state icon without background
 const FlowStateIconNoBackground = ({
@@ -60,7 +62,7 @@ export default function GoalDetailsScreen() {
   const flowButtonRef = useRef<View>(null);
 
   // New state variables for the popup modal
-  const [selectedDay, setSelectedDay] = useState<TimelineItem | null>(null);
+  const [selectedDay, setSelectedDay] = useState<Log | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [imagePosition, setImagePosition] = useState({
     x: 0,
@@ -90,7 +92,6 @@ export default function GoalDetailsScreen() {
   // Calculate final image dimensions
   const MODAL_WIDTH = SCREEN_WIDTH * 0.9;
   const MODAL_IMAGE_HEIGHT = MODAL_WIDTH * 1.5;
-  // const MODAL_PADDING = 16;
 
   // Reset animation values when component unmounts
   useEffect(() => {
@@ -99,8 +100,14 @@ export default function GoalDetailsScreen() {
     };
   }, []);
 
-  // Parse goal data from params
-  const goal = {
+  // Get the ID from params
+  const goalId = params.id as string;
+
+  // Find the goal in the GOALS array
+  const goalFromData = GOALS.find((g) => g.id === goalId);
+
+  // Parse goal data from params or use the data from GOALS
+  const goal = goalFromData || {
     id: params.id as string,
     title: params.title as string,
     color: params.color as string,
@@ -115,114 +122,12 @@ export default function GoalDetailsScreen() {
     completedDate: params.completedDate as string | undefined,
   };
 
+  // Get the logs from the goal data
+  const timelineData = goalFromData?.logs || [];
+
   // Capitalize flow state for display
   const flowStateCapitalized =
     goal.flowState.charAt(0).toUpperCase() + goal.flowState.slice(1);
-
-  // Get appropriate images based on goal type
-  const getGoalSpecificImages = (goalTitle: string, goalIcon: string) => {
-    // Default set of images
-    let images = [
-      "https://i.pinimg.com/736x/9a/d8/3e/9ad83e2c54d9164b4e2753529cddfa05.jpg",
-      "https://i.pinimg.com/736x/ac/b3/dd/acb3dde1977ab624f553afa69254d658.jpg",
-      "https://i.pinimg.com/736x/b5/cf/ef/b5cfef1fd703873309b833c6f540321f.jpg",
-      "https://i.pinimg.com/736x/57/91/39/579139d694b61e9b9311ead88e2c9ba3.jpg",
-      "https://i.pinimg.com/736x/c8/40/7e/c8407e57e79ae1e88e800535f247f64c.jpg",
-    ];
-
-    // Choose specific images based on goal title or icon
-    const title = goalTitle.toLowerCase();
-    // Use the original images for running goals
-    if (title.includes("running") || goalIcon === "WorkoutRun") {
-      return images;
-    } else if (title.includes("study") || title.includes("studying")) {
-      return [
-        "https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?q=80&w=1373&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?q=80&w=1470&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1588702547923-7093a6c3ba33?q=80&w=1470&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1456406644174-8ddd4cd52a06?q=80&w=1368&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1532012197267-da84d127e765?q=80&w=1374&auto=format&fit=crop",
-      ];
-    } else if (title.includes("meditation") || title.includes("yoga")) {
-      return [
-        "https://images.unsplash.com/photo-1506126613408-eca07ce68773?q=80&w=1498&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1545389336-cf090694435e?q=80&w=1374&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1532798442725-41036acc7489?q=80&w=1374&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1474418397713-7ede21d49118?q=80&w=1476&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?q=80&w=1638&auto=format&fit=crop",
-      ];
-    } else if (title.includes("read") || title.includes("reading")) {
-      return [
-        "https://images.unsplash.com/photo-1515592302748-6c5ea17e2f0e?q=80&w=1374&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1544947950-fa07a98d237f?q=80&w=1374&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1512820790803-83ca734da794?q=80&w=1374&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1510172951991-856a654063f9?q=80&w=1374&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1529148482759-b35b25c5f217?q=80&w=1470&auto=format&fit=crop",
-      ];
-    } else if (title.includes("guitar") || title.includes("music")) {
-      return [
-        "https://images.unsplash.com/photo-1543443258-92b04ad5ec6b?q=80&w=1470&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1605020420620-20c943cc4669?q=80&w=1470&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1510915361894-db8b60106cb1?q=80&w=1470&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1514649923863-ceaf75b7ec40?q=80&w=1470&auto=format&fit=crop",
-        "https://images.unsplash.com/photo-1511379938547-c1f69419868d?q=80&w=1470&auto=format&fit=crop",
-      ];
-    }
-
-    return images;
-  };
-
-  // Get images based on the current goal
-  const goalImages = getGoalSpecificImages(goal.title, goal.icon);
-
-  // Mock timeline data - this would be fetched from your backend in a real app
-  const timelineData = [
-    {
-      id: "1",
-      date: "2025-11-15",
-      day: "15",
-      month: "November 2025",
-      goalDay: 1, // First day of the goal
-      imageUrl: goalImages[0],
-      caption: `First day of ${goal.title} - started my journey!`,
-    },
-    {
-      id: "2",
-      date: "2025-11-17",
-      day: "17",
-      month: "November 2025",
-      goalDay: 3, // Third day of the goal
-      imageUrl: goalImages[1],
-      caption: `Day 3 of my ${goal.title} goal. Making progress!`,
-    },
-    {
-      id: "3",
-      date: "2025-11-20",
-      day: "20",
-      month: "November 2025",
-      goalDay: 6, // Sixth day of the goal
-      imageUrl: goalImages[2],
-      caption: `Continuing with ${goal.title} - feeling good about it.`,
-    },
-    {
-      id: "4",
-      date: "2025-12-05",
-      day: "05",
-      month: "December 2025",
-      goalDay: 21, // 21st day of the goal
-      imageUrl: goalImages[3],
-      caption: `${goal.title} is becoming a habit now. Great progress!`,
-    },
-    {
-      id: "5",
-      date: "2025-12-15",
-      day: "15",
-      month: "December 2025",
-      goalDay: 31, // 31st day of the goal
-      imageUrl: goalImages[4],
-      caption: `One month of ${goal.title} completed! Feeling accomplished.`,
-    },
-  ];
 
   // Helper functions for calendar generation
   const getMonthDays = (year: number, month: number): number => {
@@ -262,14 +167,14 @@ export default function GoalDetailsScreen() {
   // Create calendar data for a specific month
   const generateCalendarData = (
     monthString: string,
-    items: TimelineItem[]
-  ): { days: (TimelineItem | null)[]; dayLabels: string[] } => {
+    items: Log[]
+  ): { days: (Log | null)[]; dayLabels: string[] } => {
     const { month, year } = parseMonthString(monthString);
     const totalDays = getMonthDays(year, month);
     const firstDay = getFirstDayOfMonth(year, month);
 
     // Create array for each day of the month (1-indexed)
-    const days: (TimelineItem | null)[] = Array(totalDays + 1).fill(null);
+    const days: (Log | null)[] = Array(totalDays + 1).fill(null);
 
     // Fill in days that have timeline items
     items.forEach((item) => {
@@ -286,40 +191,23 @@ export default function GoalDetailsScreen() {
     return { days, dayLabels };
   };
 
-  // Define the type for a timeline item
-  type TimelineItem = {
-    id: string;
-    date: string;
-    day: string;
-    month: string;
-    goalDay: number;
-    imageUrl: string;
-    caption: string;
-  };
-
   // Sort the timeline data by date (for calculating goal days)
   const sortedTimelineData = [...timelineData].sort(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
   );
 
-  // Recalculate goal days based on chronological order
-  sortedTimelineData.forEach((item, index) => {
-    item.goalDay = index + 1;
-  });
-
-  // Group timeline items by month with proper typing
-  const groupedByMonth: Record<string, TimelineItem[]> =
-    sortedTimelineData.reduce(
-      (groups: Record<string, TimelineItem[]>, item: TimelineItem) => {
-        const month = item.month;
-        if (!groups[month]) {
-          groups[month] = [];
-        }
-        groups[month].push(item);
-        return groups;
-      },
-      {}
-    );
+  // Group timeline items by month
+  const groupedByMonth: Record<string, Log[]> = sortedTimelineData.reduce(
+    (groups: Record<string, Log[]>, item: Log) => {
+      const month = item.month;
+      if (!groups[month]) {
+        groups[month] = [];
+      }
+      groups[month].push(item);
+      return groups;
+    },
+    {}
+  );
 
   // Flatten the grouped items to create a single timeline
   const flatTimelineItems = Object.values(groupedByMonth).flat();
@@ -360,14 +248,15 @@ export default function GoalDetailsScreen() {
   });
 
   // Sort days within each month in reverse chronological order (latest first)
-  const sortedMonthsWithSortedDays: [string, TimelineItem[]][] =
-    sortedMonths.map(([month, items]) => {
+  const sortedMonthsWithSortedDays: [string, Log[]][] = sortedMonths.map(
+    ([month, items]) => {
       // Sort items by date in reverse chronological order
       const sortedItems = [...items].sort(
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
       );
-      return [month, sortedItems] as [string, TimelineItem[]];
-    });
+      return [month, sortedItems] as [string, Log[]];
+    }
+  );
 
   // Toggle between grid and list view
   const toggleViewMode = () => {
@@ -405,7 +294,7 @@ export default function GoalDetailsScreen() {
   };
 
   // Function to show the day popup with animation
-  const showDayModal = (day: TimelineItem, dayKey: string) => {
+  const showDayModal = (day: Log, dayKey: string) => {
     // Store the selected day data
     setSelectedDay(day);
     setIsAnimating(true);
@@ -695,11 +584,14 @@ export default function GoalDetailsScreen() {
               />
             </TouchableOpacity>
             <View style={styles.flexSpacer} />
-            <TouchableOpacity onPress={toggleViewMode}>
+            <TouchableOpacity
+              onPress={toggleViewMode}
+              hitSlop={{ top: 20, bottom: 20, left: 20, right: 10 }}
+            >
               <Icon
                 name={isGridView ? "GridView" : "HalfGrid"}
                 size={30}
-                color="white"
+                color="#0E96FF"
                 style={styles.gridViewIcon}
               />
             </TouchableOpacity>
@@ -927,7 +819,7 @@ export default function GoalDetailsScreen() {
             {sortedMonthsWithSortedDays.map(([month, items]) => (
               <View key={month} style={styles.monthGroup}>
                 <Text style={styles.monthHeaderText}>{month}</Text>
-                {items.map((item: TimelineItem, itemIndex: number) => (
+                {items.map((item: Log, itemIndex: number) => (
                   <View key={item.id} style={styles.timelineItem}>
                     {/* Date column */}
                     <View style={styles.dateColumn}>
@@ -1249,7 +1141,7 @@ const styles = StyleSheet.create({
   },
   contentCard: {
     // backgroundColor: "rgba(255, 255, 255, 0.1)",
-    borderRadius: 16,
+    borderRadius: 20,
     overflow: "hidden",
     marginBottom: 16,
     width: "75%",
@@ -1258,7 +1150,7 @@ const styles = StyleSheet.create({
   postImage: {
     width: "100%",
     height: 320,
-    borderRadius: 16,
+    borderRadius: 20,
   },
   captionContainer: {
     padding: 12,
@@ -1333,7 +1225,7 @@ const styles = StyleSheet.create({
   },
   popupContent: {
     backgroundColor: "#1F1F1F",
-    borderRadius: 16,
+    borderRadius: 20,
     padding: 20,
     width: "100%",
     shadowColor: "#000",
@@ -1359,10 +1251,8 @@ const styles = StyleSheet.create({
   },
   flowStatesList: {
     marginBottom: 20,
-    // backgroundColor: "rgba(194, 194, 194, 0.08)",
     backgroundColor: "hsl(0, 1.10%, 18.60%)",
-
-    borderRadius: 12,
+    borderRadius: 20,
     padding: 12,
   },
   flowStateItem: {
@@ -1397,7 +1287,7 @@ const styles = StyleSheet.create({
   },
   closeButton: {
     backgroundColor: "hsl(0, 0.00%, 17.60%)",
-    borderRadius: 100,
+    borderRadius: 20,
     padding: 10,
     alignItems: "center",
   },
@@ -1508,7 +1398,6 @@ const styles = StyleSheet.create({
     position: "absolute",
     overflow: "hidden",
     backgroundColor: "#1F1F1F",
-
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
@@ -1529,7 +1418,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: "rgba(31, 31, 31, 1)",
+    backgroundColor: "#1F1F1F",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingTop: 8,
