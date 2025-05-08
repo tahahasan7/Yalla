@@ -1,8 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as FileSystem from "expo-file-system";
+import * as Haptics from "expo-haptics";
 import * as MediaLibrary from "expo-media-library";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   Dimensions,
   Image,
@@ -38,6 +40,16 @@ const ImageModal: React.FC<ImageModalProps> = ({
   const [isAnimating, setIsAnimating] = useState(false);
   const [isHighResLoaded, setIsHighResLoaded] = useState(false);
   const [shouldLoadHighRes, setShouldLoadHighRes] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [showSuccessNotification, setShowSuccessNotification] = useState(false);
+  const [notificationMessage, setNotificationMessage] = useState("");
+
+  // Animation value for notification
+  const notificationOffset = useRef(new Animated.Value(-100)).current;
+
+  // Animation value for success indicator
+  const successOpacity = useRef(new Animated.Value(0)).current;
+  const successScale = useRef(new Animated.Value(0.5)).current;
 
   // Get screen dimensions
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } =
@@ -208,6 +220,11 @@ const ImageModal: React.FC<ImageModalProps> = ({
   const shareImage = async () => {
     if (selectedDay) {
       try {
+        // Trigger haptic feedback
+        if (Platform.OS !== "web") {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        }
+
         await Share.share({
           url: selectedDay.imageUrl,
           message: `Check out my progress on day ${selectedDay.goalDay}: ${selectedDay.caption}`,
@@ -218,39 +235,107 @@ const ImageModal: React.FC<ImageModalProps> = ({
     }
   };
 
+  // Function to show notification toast
+  const showNotification = (message: string) => {
+    setNotificationMessage(message);
+    setShowSuccessNotification(true);
+    notificationOffset.setValue(-100);
+
+    // Animate notification in
+    Animated.spring(notificationOffset, {
+      toValue: 0,
+      friction: 8,
+      tension: 80,
+      useNativeDriver: true,
+    }).start();
+
+    // Hide notification after delay
+    setTimeout(() => {
+      Animated.timing(notificationOffset, {
+        toValue: -100,
+        duration: 300,
+        useNativeDriver: true,
+      }).start(() => {
+        setShowSuccessNotification(false);
+      });
+    }, 2000);
+  };
+
   // Function to download the image
   const downloadImage = async () => {
-    if (selectedDay && Platform.OS !== "web") {
+    if (selectedDay) {
       try {
-        // Request permission to access media library
-        const { status } = await MediaLibrary.requestPermissionsAsync();
+        setIsDownloading(true);
+        // Trigger haptic feedback when download starts
+        if (Platform.OS !== "web") {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        }
 
-        if (status === "granted") {
-          // Create a local file URL for the image
-          const fileUri =
-            FileSystem.documentDirectory + `day_${selectedDay.goalDay}.jpg`;
+        if (Platform.OS === "web") {
+          // Web platform handling
+          const link = document.createElement("a");
+          link.href = selectedDay.imageUrl;
+          link.download = `day_${selectedDay.goalDay}.jpg`;
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
 
-          // Download the image
-          const downloadResult = await FileSystem.downloadAsync(
-            selectedDay.imageUrl,
-            fileUri
-          );
+          // Show notification
+          showNotification("Image downloaded successfully");
 
-          if (downloadResult.status === 200) {
-            // Save the image to the media library
-            const asset = await MediaLibrary.createAssetAsync(
-              downloadResult.uri
-            );
-            await MediaLibrary.createAlbumAsync("Yalla Goals", asset, false);
-
-            // Show success feedback
-            console.log("Image saved to gallery");
+          // Success haptic feedback
+          if (Platform.OS !== "web") {
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           }
         } else {
-          console.log("Permission to access media library denied");
+          // Mobile platform handling
+          const { status } = await MediaLibrary.requestPermissionsAsync();
+
+          if (status === "granted") {
+            // Create a local file URL for the image
+            const fileUri =
+              FileSystem.documentDirectory + `day_${selectedDay.goalDay}.jpg`;
+
+            // Download the image
+            const downloadResult = await FileSystem.downloadAsync(
+              selectedDay.imageUrl,
+              fileUri
+            );
+
+            if (downloadResult.status === 200) {
+              // Save the image to the media library
+              const asset = await MediaLibrary.createAssetAsync(
+                downloadResult.uri
+              );
+              await MediaLibrary.createAlbumAsync("Yalla Goals", asset, false);
+
+              // Show notification
+              showNotification("Saved to gallery");
+
+              // Success haptic feedback
+              Haptics.notificationAsync(
+                Haptics.NotificationFeedbackType.Success
+              );
+            }
+          } else {
+            Alert.alert(
+              "Permission Denied",
+              "Permission to access media library denied"
+            );
+            // Error haptic feedback
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          }
         }
       } catch (error) {
         console.error("Error downloading image:", error);
+        Alert.alert("Error", "Failed to download image");
+
+        // Error haptic feedback
+        if (Platform.OS !== "web") {
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        }
+      } finally {
+        setIsDownloading(false);
       }
     }
   };
@@ -265,6 +350,23 @@ const ImageModal: React.FC<ImageModalProps> = ({
       <Animated.View
         style={[styles.modalOverlay, { opacity: animatedValues.opacity }]}
       >
+        {/* Success Notification */}
+        {showSuccessNotification && (
+          <Animated.View
+            style={[
+              styles.notificationContainer,
+              {
+                transform: [{ translateY: notificationOffset }],
+              },
+            ]}
+          >
+            <View style={styles.notificationContent}>
+              <Ionicons name="checkmark-circle" size={22} color="#22c55e" />
+              <Text style={styles.notificationText}>{notificationMessage}</Text>
+            </View>
+          </Animated.View>
+        )}
+
         <TouchableOpacity
           style={styles.modalOverlayTouch}
           activeOpacity={1}
@@ -348,9 +450,18 @@ const ImageModal: React.FC<ImageModalProps> = ({
                   <TouchableOpacity
                     style={styles.modalActionButton}
                     onPress={downloadImage}
+                    disabled={isDownloading}
                   >
-                    <Ionicons name="download-outline" size={22} color="white" />
-                    <Text style={styles.modalActionText}>Download</Text>
+                    <Ionicons
+                      name={
+                        isDownloading ? "hourglass-outline" : "download-outline"
+                      }
+                      size={22}
+                      color="white"
+                    />
+                    <Text style={styles.modalActionText}>
+                      {isDownloading ? "Downloading..." : "Download"}
+                    </Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
@@ -461,6 +572,35 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: FontFamily.Medium,
     marginLeft: 8,
+  },
+  notificationContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1000,
+    alignItems: "center",
+    paddingTop: 100,
+  },
+  notificationContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 1)",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 100,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 5,
+    maxWidth: "90%",
+  },
+  notificationText: {
+    color: "white",
+    marginLeft: 8,
+    fontFamily: FontFamily.Medium,
+    fontSize: 14,
   },
 });
 
