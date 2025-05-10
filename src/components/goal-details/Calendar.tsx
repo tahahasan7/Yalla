@@ -5,32 +5,30 @@ import { Log } from "../../constants/goalData";
 
 interface CalendarProps {
   sortedMonths: [string, Log[]][];
-  onDayPress: (day: Log, dayKey: string) => void;
+  onDayPress: (day: Log | Log[], dayKey: string) => void;
   registerDayRef: (key: string, ref: View | null) => void;
+  isGroupGoal?: boolean;
 }
 
 const Calendar: React.FC<CalendarProps> = ({
   sortedMonths,
   onDayPress,
   registerDayRef,
+  isGroupGoal = false,
 }) => {
-  // Helper functions for calendar generation
-  const getMonthDays = (year: number, month: number): number => {
-    return new Date(year, month + 1, 0).getDate();
-  };
+  const getMonthDays = (year: number, month: number): number =>
+    new Date(year, month + 1, 0).getDate();
 
   const getFirstDayOfMonth = (year: number, month: number): number => {
-    // Adjust to make Monday as day 0
     const day = new Date(year, month, 1).getDay();
-    return day === 0 ? 6 : day - 1; // Sunday becomes 6, Monday becomes 0
+    return day === 0 ? 6 : day - 1; // Monday = 0
   };
 
-  // Extract month and year from month string (e.g., "January 2025" -> { month: 0, year: 2025 })
   const parseMonthString = (
     monthString: string
   ): { month: number; year: number } => {
     const [monthName, yearStr] = monthString.split(" ");
-    const year = parseInt(yearStr);
+    const year = parseInt(yearStr, 10);
     const monthNames = [
       "January",
       "February",
@@ -45,34 +43,29 @@ const Calendar: React.FC<CalendarProps> = ({
       "November",
       "December",
     ];
-    const month = monthNames.indexOf(monthName);
-    return { month, year };
+    return { month: monthNames.indexOf(monthName), year };
   };
 
-  // Create calendar data for a specific month
   const generateCalendarData = (
     monthString: string,
     items: Log[]
-  ): { days: (Log | null)[]; dayLabels: string[] } => {
+  ): { days: (Log[] | null)[]; dayLabels: string[] } => {
     const { month, year } = parseMonthString(monthString);
     const totalDays = getMonthDays(year, month);
     const firstDay = getFirstDayOfMonth(year, month);
 
-    // Create array for each day of the month (1-indexed)
-    const days: (Log | null)[] = Array(totalDays + 1).fill(null);
+    const days: (Log[] | null)[] = Array(totalDays + 1).fill(null);
 
-    // Fill in days that have timeline items
     items.forEach((item) => {
       const date = new Date(item.date);
       if (date.getMonth() === month && date.getFullYear() === year) {
         const day = date.getDate();
-        days[day] = item;
+        if (!days[day]) days[day] = [item];
+        else days[day].push(item);
       }
     });
 
-    // Create day labels for the calendar header
     const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-
     return { days, dayLabels };
   };
 
@@ -87,7 +80,6 @@ const Calendar: React.FC<CalendarProps> = ({
           <View key={month} style={styles.calendarMonthContainer}>
             <Text style={styles.monthHeaderText}>{month}</Text>
 
-            {/* Day labels row */}
             <View style={styles.calendarDayLabelsRow}>
               {dayLabels.map((label, idx) => (
                 <View key={`label-${idx}`} style={styles.calendarDayLabelCell}>
@@ -96,19 +88,12 @@ const Calendar: React.FC<CalendarProps> = ({
               ))}
             </View>
 
-            {/* Calendar rows */}
             {[0, 1, 2, 3, 4, 5].map((weekIdx) => {
-              // Skip empty last rows
-              if (weekIdx * 7 + 1 > days.length + firstDay - 1) {
-                return null;
-              }
-
+              if (weekIdx * 7 + 1 > days.length + firstDay - 1) return null;
               return (
                 <View key={`week-${weekIdx}`} style={styles.calendarRow}>
                   {[0, 1, 2, 3, 4, 5, 6].map((dayIdx) => {
                     const dayPosition = weekIdx * 7 + dayIdx + 1 - firstDay;
-
-                    // If before the first day of month or after the last day
                     if (dayPosition < 1 || dayPosition >= days.length) {
                       return (
                         <View
@@ -118,8 +103,9 @@ const Calendar: React.FC<CalendarProps> = ({
                       );
                     }
 
-                    const dayData = days[dayPosition];
+                    const dayLogs = days[dayPosition];
                     const dayKey = `day-${month}-${dayPosition}`;
+                    const hasMultiplePosts = dayLogs && dayLogs.length > 1;
 
                     return (
                       <TouchableOpacity
@@ -129,15 +115,18 @@ const Calendar: React.FC<CalendarProps> = ({
                         key={`day-${dayPosition}`}
                         style={styles.calendarDayCell}
                         onPress={() => {
-                          if (dayData) {
-                            onDayPress(dayData, dayKey);
+                          if (dayLogs) {
+                            onDayPress(
+                              dayLogs.length === 1 ? dayLogs[0] : dayLogs,
+                              dayKey
+                            );
                           }
                         }}
                       >
-                        {dayData ? (
+                        {dayLogs ? (
                           <View style={styles.calendarDayWithImage}>
                             <Image
-                              source={{ uri: dayData.imageUrl }}
+                              source={{ uri: dayLogs[0].imageUrl }}
                               style={styles.calendarDayImage}
                               resizeMode="cover"
                             />
@@ -145,6 +134,25 @@ const Calendar: React.FC<CalendarProps> = ({
                               <Text style={styles.calendarDayNumber}>
                                 {dayPosition}
                               </Text>
+
+                              {/* Only show who posted for group goals */}
+                              {isGroupGoal && dayLogs[0].postedBy && (
+                                <View style={styles.posterIndicator}>
+                                  <Image
+                                    source={{
+                                      uri: dayLogs[0].postedBy.profilePic,
+                                    }}
+                                    style={styles.posterAvatar}
+                                  />
+                                  {hasMultiplePosts && (
+                                    <View style={styles.multiplePostsIndicator}>
+                                      <Text style={styles.multiplePostsText}>
+                                        +{dayLogs.length - 1}
+                                      </Text>
+                                    </View>
+                                  )}
+                                </View>
+                              )}
                             </View>
                           </View>
                         ) : (
@@ -199,15 +207,15 @@ const styles = StyleSheet.create({
   },
   calendarRow: {
     flexDirection: "row",
-    height: 50,
-    marginBottom: 8,
+    height: 80, // increased height
+    marginBottom: 2,
   },
   calendarDayCell: {
     flex: 1,
-    aspectRatio: 1,
     alignItems: "center",
     justifyContent: "center",
     margin: 2,
+    // removed aspectRatio so cells are taller than wide
   },
   calendarDayWithImage: {
     width: "100%",
@@ -250,6 +258,34 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: FontFamily.Regular,
     opacity: 0.5,
+  },
+  posterIndicator: {
+    position: "absolute",
+    bottom: 4,
+    right: 4,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  posterAvatar: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: "white",
+  },
+  multiplePostsIndicator: {
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    borderRadius: 8,
+    marginLeft: -6,
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderWidth: 1,
+    borderColor: "white",
+  },
+  multiplePostsText: {
+    color: "white",
+    fontSize: 8,
+    fontFamily: FontFamily.SemiBold,
   },
 });
 

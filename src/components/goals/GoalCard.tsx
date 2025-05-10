@@ -1,8 +1,10 @@
+import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router } from "expo-router";
 import React from "react";
 import {
   Animated,
+  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -129,6 +131,36 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onLongPress }) => {
     });
   };
 
+  // Render participant avatars in a simpler way
+  const renderParticipants = () => {
+    if (!goal.participants || goal.participants.length === 0) return null;
+
+    // Only show first 3 participants
+    const visibleParticipants = goal.participants.slice(0, 3);
+    const hasMore = goal.participants.length > 3;
+
+    return (
+      <View style={styles.participantsContainer}>
+        <View style={styles.avatarRow}>
+          {visibleParticipants.map((participant, index) => (
+            <Image
+              key={participant.id}
+              source={{ uri: participant.profilePic }}
+              style={[styles.avatarImage, { marginLeft: index > 0 ? -10 : 0 }]}
+            />
+          ))}
+          {hasMore && (
+            <View style={[styles.moreIndicator, { marginLeft: -10 }]}>
+              <Text style={styles.moreText}>
+                +{goal.participants.length - 3}
+              </Text>
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  };
+
   return (
     <Animated.View
       style={{
@@ -140,7 +172,7 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onLongPress }) => {
         activeOpacity={0.9}
         onPress={handleGoalPress}
         onLongPress={handleLongPress}
-        delayLongPress={500} // Half a second for long press
+        delayLongPress={500}
         style={styles.goalCardWrapper}
       >
         <View
@@ -150,55 +182,66 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onLongPress }) => {
             goal.completed && styles.completedGoalCard,
           ]}
         >
-          {/* Icon and Title */}
-          <View style={styles.headerSection}>
-            <View
-              style={[styles.iconContainer, { backgroundColor: goal.color }]}
-            >
-              <Icon name={categoryIcon.icon} size={22} color="#fff" />
+          {/* Top section with icon, title, group indicator, and flow state */}
+          <View style={styles.topSection}>
+            {/* Left: Icon and Title */}
+            <View style={styles.leftSection}>
+              <View
+                style={[styles.iconContainer, { backgroundColor: goal.color }]}
+              >
+                <Icon name={categoryIcon.icon} size={22} color="#fff" />
+              </View>
+              <View style={styles.titleContainer}>
+                <Text style={styles.goalTitle}>{goal.title}</Text>
+                {goal.goalType === "group" && (
+                  <View style={styles.groupIndicator}>
+                    <Ionicons
+                      name="people"
+                      size={10}
+                      color="rgba(255, 255, 255, 0.7)"
+                    />
+                    <Text style={styles.groupText}>Group</Text>
+                  </View>
+                )}
+              </View>
             </View>
-            <Text style={styles.goalTitle}>{goal.title}</Text>
 
-            {/* Flow state indicator for quick status scanning */}
+            {/* Right: Flow state */}
             <FlowStateIcon flowState={goal.flowState} size={24} />
           </View>
 
+          {/* Middle section: Progress or completion info */}
           {goal.completed ? (
-            // Completed goal information
             <View style={styles.completedContainer}>
-              <View style={{ flex: 1 }}></View>
               <View style={styles.completedBadge}>
                 <Text style={styles.completedText}>Completed</Text>
               </View>
             </View>
           ) : hasEndDate ? (
-            // Progress bar for goals with end dates
-            <View>
+            <View style={styles.progressSection}>
               <View style={styles.progressLabelContainer}>
                 <Text style={styles.progressLabel}>{getEndDateText()}</Text>
                 <Text style={styles.progressText}>{progressPercentage}%</Text>
               </View>
-              <View style={styles.progressBarContainer}>
-                <View style={styles.progressBar}>
-                  <View
-                    style={[
-                      styles.progressFill,
-                      { width: `${progressPercentage}%` },
-                    ]}
-                  />
-                </View>
+              <View style={styles.progressBar}>
+                <View
+                  style={[
+                    styles.progressFill,
+                    { width: `${progressPercentage}%` },
+                  ]}
+                />
               </View>
             </View>
           ) : (
-            // Info display for ongoing goals without end dates
             <View style={styles.ongoingContainer}>
-              <View style={styles.ongoingInfoRow}>
-                <Text style={styles.ongoingInfoText}>
-                  {goal.frequency} • {goal.duration}
-                </Text>
-              </View>
+              <Text style={styles.ongoingInfoText}>
+                {goal.frequency} • {goal.duration}
+              </Text>
             </View>
           )}
+
+          {/* Bottom section: Participants (only for group goals) */}
+          {goal.goalType === "group" && renderParticipants()}
         </View>
       </TouchableOpacity>
     </Animated.View>
@@ -206,10 +249,10 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onLongPress }) => {
 };
 
 const styles = StyleSheet.create({
-  // Updated card styles for vertical layout
+  // Base card styles
   goalCardWrapper: {
-    width: "100%", // Full width for single column
-    marginBottom: 12, // Spacing between cards
+    width: "100%",
+    marginBottom: 12,
     borderRadius: 14,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
@@ -217,134 +260,142 @@ const styles = StyleSheet.create({
     shadowRadius: 3,
     elevation: 2,
   },
-
   goalCard: {
     borderRadius: 14,
     padding: 16,
-    gap: 14,
   },
 
-  headerSection: {
+  // Top section: icon, title and flow state
+  topSection: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 12,
   },
-
+  leftSection: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
   iconContainer: {
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "rgba(255, 255, 255, 0.15)",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 10,
   },
-
-  goalTitle: {
+  titleContainer: {
     flex: 1,
+  },
+  goalTitle: {
     fontSize: 16,
     fontFamily: FontFamily.SemiBold,
     color: "white",
   },
-
-  progressBarContainer: {
+  groupIndicator: {
     flexDirection: "row",
     alignItems: "center",
+    marginTop: 2,
   },
-
-  progressBar: {
-    flex: 1,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    overflow: "hidden",
-  },
-
-  progressFill: {
-    height: "100%",
-    borderRadius: 3,
-    backgroundColor: "rgba(255, 255, 255, 0.9)",
-  },
-
-  progressText: {
-    fontSize: 12,
-    fontFamily: FontFamily.SemiBold,
-    color: "white",
-    marginLeft: 8,
-    minWidth: 30,
-    textAlign: "right",
-  },
-
-  // New styles for ongoing goals
-  ongoingContainer: {
-    width: "100%",
-  },
-
-  ongoingInfoRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    width: "100%",
-  },
-
-  ongoingInfoText: {
-    fontSize: 12,
+  groupText: {
+    fontSize: 10,
     fontFamily: FontFamily.Medium,
-    color: "white",
-    opacity: 0.9,
+    color: "rgba(255, 255, 255, 0.7)",
+    marginLeft: 4,
   },
 
-  streakText: {
-    fontSize: 12,
-    fontFamily: FontFamily.SemiBold,
-    color: "white",
-    marginLeft: 8,
+  // Progress section
+  progressSection: {
+    marginBottom: 4,
   },
-
-  // Styles for progress label
   progressLabelContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 4,
   },
-
   progressLabel: {
     fontSize: 12,
     fontFamily: FontFamily.Medium,
+    color: "rgba(255, 255, 255, 0.8)",
+  },
+  progressText: {
+    fontSize: 12,
+    fontFamily: FontFamily.SemiBold,
     color: "white",
-    opacity: 0.9,
+  },
+  progressBar: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: "rgba(255, 255, 255, 0.15)",
+    overflow: "hidden",
+  },
+  progressFill: {
+    height: "100%",
+    borderRadius: 2,
+    backgroundColor: "rgba(255, 255, 255, 0.9)",
   },
 
-  // Styles for completed goals
+  // Ongoing goals
+  ongoingContainer: {
+    marginBottom: 4,
+  },
+  ongoingInfoText: {
+    fontSize: 12,
+    fontFamily: FontFamily.Medium,
+    color: "rgba(255, 255, 255, 0.8)",
+  },
+
+  // Completed goals
   completedGoalCard: {
     opacity: 0.8,
   },
-
   completedContainer: {
     flexDirection: "row",
-    justifyContent: "flex-end",
-    alignItems: "center",
+    marginBottom: 4,
   },
-
   completedBadge: {
-    backgroundColor: "rgba(255, 255, 255, 0.3)",
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 10,
   },
-
   completedText: {
     color: "white",
     fontSize: 12,
     fontFamily: FontFamily.Regular,
   },
 
-  completedDate: {
-    fontSize: 12,
-    fontFamily: FontFamily.Medium,
+  // Participants
+  participantsContainer: {
+    marginTop: 10,
+  },
+  avatarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  avatarImage: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#1F1F1F",
+  },
+  moreIndicator: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: "rgb(0, 0, 0)",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#1F1F1F",
+  },
+  moreText: {
     color: "white",
-    opacity: 0.8,
+    fontSize: 9,
+    fontFamily: FontFamily.SemiBold,
   },
 });
 

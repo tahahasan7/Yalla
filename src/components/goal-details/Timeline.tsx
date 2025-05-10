@@ -8,12 +8,14 @@ interface TimelineProps {
   sortedMonthsWithSortedDays: [string, Log[]][];
   onDayPress: (day: Log, dayKey: string) => void;
   registerDayRef: (key: string, ref: View | null) => void;
+  isGroupGoal?: boolean;
 }
 
 const Timeline: React.FC<TimelineProps> = ({
   sortedMonthsWithSortedDays,
   onDayPress,
   registerDayRef,
+  isGroupGoal = false,
 }) => {
   return (
     <View style={styles.timelineContainer}>
@@ -39,6 +41,19 @@ const Timeline: React.FC<TimelineProps> = ({
                 <Text style={styles.weekText}>{item.week}</Text>
 
                 <View style={styles.captionContainer}>
+                  {/* User who posted - only show for group goals */}
+                  {isGroupGoal && item.postedBy && (
+                    <View style={styles.posterContainer}>
+                      <Image
+                        source={{ uri: item.postedBy.profilePic }}
+                        style={styles.posterAvatar}
+                      />
+                      <Text style={styles.posterName}>
+                        {item.postedBy.name}
+                      </Text>
+                    </View>
+                  )}
+
                   <View style={styles.captionHeader}>
                     <Text style={styles.goalDayText}>Day {item.goalDay}</Text>
                     <TouchableOpacity style={styles.menuButton}>
@@ -173,6 +188,26 @@ const styles = StyleSheet.create({
   },
   menuButton: {
     paddingVertical: 8,
+  },
+  // New styles for poster info
+  posterContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 10,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.1)",
+  },
+  posterAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    marginRight: 8,
+  },
+  posterName: {
+    fontSize: 14,
+    fontFamily: FontFamily.Medium,
+    color: "white",
   },
 });
 

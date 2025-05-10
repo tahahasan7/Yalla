@@ -44,8 +44,7 @@ export default function TabLayout() {
           tabBarActiveTintColor: theme.colors.primary,
           tabBarInactiveTintColor: theme.colors.text,
           tabBarStyle: {
-            backgroundColor:
-              Platform.OS === "ios" ? "transparent" : "hsla(0, 0%, 0%, 0.7)",
+            backgroundColor: "black",
             borderTopColor: "transparent",
             height: Platform.OS === "ios" ? 85 : 60,
             paddingBottom: Platform.OS === "ios" ? 30 : 8,
@@ -58,21 +57,19 @@ export default function TabLayout() {
             left: 0,
             right: 0,
           },
-          tabBarBackground:
-            Platform.OS === "ios"
-              ? undefined
-              : () => (
-                  <View
-                    style={{
-                      backgroundColor: "#000000",
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                    }}
-                  />
-                ),
+          tabBarBackground: () => (
+            <View
+              style={{
+                backgroundColor: "#000000",
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                opacity: 0.7,
+              }}
+            />
+          ),
           headerStyle: {
             backgroundColor: theme.colors.card,
             elevation: 0,

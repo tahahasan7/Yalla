@@ -7,9 +7,11 @@ import {
   Alert,
   Animated,
   Dimensions,
+  FlatList,
   Image,
   Modal,
   Platform,
+  ScrollView,
   Share,
   StyleSheet,
   Text,
@@ -19,8 +21,11 @@ import {
 import { FontFamily } from "../../constants/fonts";
 import { Log } from "../../constants/goalData";
 
+// Constant for slideshow timer (in milliseconds)
+const SLIDESHOW_TIMEOUT = 5000; // 5 seconds per image
+
 interface ImageModalProps {
-  selectedDay: Log | null;
+  selectedDay: Log | Log[] | null;
   isVisible: boolean;
   imagePosition: {
     x: number;
@@ -29,6 +34,7 @@ interface ImageModalProps {
     height: number;
   };
   onClose: () => void;
+  isGroupGoal?: boolean;
 }
 
 const ImageModal: React.FC<ImageModalProps> = ({
@@ -36,6 +42,7 @@ const ImageModal: React.FC<ImageModalProps> = ({
   isVisible,
   imagePosition,
   onClose,
+  isGroupGoal = false,
 }) => {
   const [isAnimating, setIsAnimating] = useState(false);
   const [isHighResLoaded, setIsHighResLoaded] = useState(false);
@@ -43,6 +50,28 @@ const ImageModal: React.FC<ImageModalProps> = ({
   const [isDownloading, setIsDownloading] = useState(false);
   const [showSuccessNotification, setShowSuccessNotification] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState("");
+  const [selectedPost, setSelectedPost] = useState<Log | null>(null);
+  const [multiplePosts, setMultiplePosts] = useState<Log[]>([]);
+  const [currentPostIndex, setCurrentPostIndex] = useState(0);
+  const [slideshowActive, setSlideshowActive] = useState(true); // Autoplay by default
+  const [slideshowProgress, setSlideshowProgress] = useState(0);
+  const [isLiked, setIsLiked] = useState(false);
+  const [likeCount, setLikeCount] = useState(0);
+
+  // Track if modal is fully open
+  const isModalOpenRef = useRef(false);
+
+  // Timer ref for slideshow
+  const slideshowTimerRef = useRef<number | null>(null);
+  const slideshowAnimationRef = useRef<Animated.CompositeAnimation | null>(
+    null
+  );
+  const progressAnimationValue = useRef(new Animated.Value(0)).current;
+
+  // Constants for layout calculations
+  const DESIRED_GAP = 0; // the exact px you want between image bottom & panel top
+  const MIN_TOP_GAP = 80; // just to keep it from hugging the very top
+  const FIXED_BOTTOM_SECTION_HEIGHT = 200; // Increased fixed height for bottom section
 
   // Animation value for notification
   const notificationOffset = useRef(new Animated.Value(-100)).current;
@@ -51,13 +80,21 @@ const ImageModal: React.FC<ImageModalProps> = ({
   const successOpacity = useRef(new Animated.Value(0)).current;
   const successScale = useRef(new Animated.Value(0.5)).current;
 
+  // Ref for flatlist
+  const thumbnailsRef = useRef<FlatList>(null);
+
   // Get screen dimensions
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } =
     Dimensions.get("window");
 
   // Calculate modal dimensions
   const MODAL_WIDTH = SCREEN_WIDTH * 0.9;
-  const MODAL_IMAGE_HEIGHT = MODAL_WIDTH * 1.5;
+  const MODAL_IMAGE_HEIGHT =
+    SCREEN_HEIGHT -
+    FIXED_BOTTOM_SECTION_HEIGHT -
+    DESIRED_GAP -
+    MIN_TOP_GAP -
+    30; // Added extra margin
 
   // Animation values
   const animatedValues = {
@@ -77,14 +114,58 @@ const ImageModal: React.FC<ImageModalProps> = ({
     };
   }, []);
 
-  // Start animation when modal becomes visible
+  // UseEffect for handling modal visibility - this is the only effect needed for controlling animations
   useEffect(() => {
-    if (isVisible && selectedDay) {
-      animateOpen();
+    if (isVisible) {
+      if (selectedPost && !isModalOpenRef.current) {
+        // Only animate open if modal isn't already open
+        animateOpen();
+      }
+    } else {
+      // Reset modal state when it's closed
+      isModalOpenRef.current = false;
+      // Stop slideshow when modal closes
+      stopSlideshow();
     }
-  }, [isVisible, selectedDay]);
+  }, [isVisible, selectedPost]);
 
-  // Function to prepare for high-quality image loading
+  // Process selectedDay when it changes
+  useEffect(() => {
+    if (selectedDay) {
+      const wasModalOpen = isModalOpenRef.current;
+
+      if (Array.isArray(selectedDay)) {
+        // Multiple posts
+        setMultiplePosts(selectedDay);
+        setSelectedPost(selectedDay[0]);
+        setCurrentPostIndex(0);
+      } else {
+        // Single post
+        setMultiplePosts([selectedDay]);
+        setSelectedPost(selectedDay);
+        setCurrentPostIndex(0);
+      }
+
+      // Maintain the modal's open state
+      isModalOpenRef.current = wasModalOpen;
+
+      // Start slideshow if there are multiple posts and modal is opening
+      if (
+        !wasModalOpen &&
+        Array.isArray(selectedDay) &&
+        selectedDay.length > 1
+      ) {
+        // Default to active
+        setSlideshowActive(true);
+      }
+    } else {
+      setMultiplePosts([]);
+      setSelectedPost(null);
+      setCurrentPostIndex(0);
+    }
+  }, [selectedDay]);
+
+  // Function to reset image load state
   const resetImageLoadState = () => {
     setIsHighResLoaded(false);
     setShouldLoadHighRes(false);
@@ -95,74 +176,85 @@ const ImageModal: React.FC<ImageModalProps> = ({
     setIsAnimating(true);
     resetImageLoadState();
 
-    // Calculate the center position for the modal
+    const targetH = MODAL_IMAGE_HEIGHT;
+    const targetY = MIN_TOP_GAP;
     const targetX = (SCREEN_WIDTH - MODAL_WIDTH) / 2;
-    const targetY = Math.max(
-      80,
-      (SCREEN_HEIGHT - MODAL_IMAGE_HEIGHT - 240) / 2
-    );
 
-    // Set initial animation values
-    animatedValues.x.setValue(imagePosition.x);
-    animatedValues.y.setValue(imagePosition.y);
-    animatedValues.width.setValue(imagePosition.width);
-    animatedValues.height.setValue(imagePosition.height);
-    animatedValues.opacity.setValue(0);
-    animatedValues.contentOpacity.setValue(0);
-    animatedValues.borderRadius.setValue(8);
+    // Init from the thumbnail frame only if not already open
+    if (!isModalOpenRef.current) {
+      animatedValues.x.setValue(imagePosition.x);
+      animatedValues.y.setValue(imagePosition.y);
+      animatedValues.width.setValue(imagePosition.width);
+      animatedValues.height.setValue(imagePosition.height);
+      animatedValues.borderRadius.setValue(8);
+      animatedValues.opacity.setValue(0);
+      animatedValues.contentOpacity.setValue(0);
 
-    // Animate the background appearing
-    Animated.timing(animatedValues.opacity, {
-      toValue: 1,
-      duration: 150,
-      useNativeDriver: false,
-    }).start();
-
-    // Animate the image expanding
-    Animated.parallel([
-      Animated.timing(animatedValues.x, {
-        toValue: targetX,
-        duration: 200,
-        useNativeDriver: false,
-      }),
-      Animated.timing(animatedValues.y, {
-        toValue: targetY,
-        duration: 200,
-        useNativeDriver: false,
-      }),
-      Animated.timing(animatedValues.width, {
-        toValue: MODAL_WIDTH,
-        duration: 200,
-        useNativeDriver: false,
-      }),
-      Animated.timing(animatedValues.height, {
-        toValue: MODAL_IMAGE_HEIGHT,
-        duration: 200,
-        useNativeDriver: false,
-      }),
-      Animated.timing(animatedValues.borderRadius, {
-        toValue: 16,
-        duration: 200,
-        useNativeDriver: false,
-      }),
-    ]).start(() => {
-      // Show the content after image has expanded
-      Animated.timing(animatedValues.contentOpacity, {
+      // Fade in backdrop
+      Animated.timing(animatedValues.opacity, {
         toValue: 1,
         duration: 150,
         useNativeDriver: false,
-      }).start(() => {
-        setIsAnimating(false);
-        // Now that animation is complete, load high-res image
-        setShouldLoadHighRes(true);
+      }).start();
+
+      // Expand & reposition
+      Animated.parallel([
+        Animated.timing(animatedValues.x, {
+          toValue: targetX,
+          duration: 200,
+          useNativeDriver: false,
+        }),
+        Animated.timing(animatedValues.y, {
+          toValue: targetY,
+          duration: 200,
+          useNativeDriver: false,
+        }),
+        Animated.timing(animatedValues.width, {
+          toValue: MODAL_WIDTH,
+          duration: 200,
+          useNativeDriver: false,
+        }),
+        Animated.timing(animatedValues.height, {
+          toValue: targetH,
+          duration: 200,
+          useNativeDriver: false,
+        }),
+        Animated.timing(animatedValues.borderRadius, {
+          toValue: 16,
+          duration: 200,
+          useNativeDriver: false,
+        }),
+      ]).start(() => {
+        Animated.timing(animatedValues.contentOpacity, {
+          toValue: 1,
+          duration: 150,
+          useNativeDriver: false,
+        }).start(() => {
+          setIsAnimating(false);
+          setShouldLoadHighRes(true);
+          isModalOpenRef.current = true; // Mark modal as fully open
+        });
       });
-    });
+    } else {
+      // If modal is already open, just ensure values are correct
+      // without running any animations
+      animatedValues.x.setValue(targetX);
+      animatedValues.y.setValue(targetY);
+      animatedValues.width.setValue(MODAL_WIDTH);
+      animatedValues.height.setValue(targetH);
+      animatedValues.borderRadius.setValue(16);
+      animatedValues.opacity.setValue(1);
+      animatedValues.contentOpacity.setValue(1);
+      setIsAnimating(false);
+      setShouldLoadHighRes(true);
+    }
   };
 
   // Function to animate the modal closing
   const animateClose = () => {
     if (isAnimating) return;
 
+    isModalOpenRef.current = false; // Mark modal as closing
     setIsAnimating(true);
 
     // First hide the content
@@ -216,9 +308,172 @@ const ImageModal: React.FC<ImageModalProps> = ({
     animateClose();
   };
 
+  // Function to handle changing the selected post without any animation
+  const handleSelectPost = (post: Log, index: number) => {
+    if (selectedPost?.id === post.id || isAnimating) return;
+
+    // Only trigger haptic feedback if not on web
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+
+    // Update the index
+    setCurrentPostIndex(index);
+
+    // Since the modal is already open, directly switch images without any animation
+    // Directly switch image without any animation or state change that might
+    // trigger the modal's opening animation
+    setIsHighResLoaded(true); // Prevent fade-in effect
+    setSelectedPost(post);
+    setShouldLoadHighRes(true);
+
+    // Ensure we're not triggering modal animations
+    // Don't touch isModalOpenRef as it should remain true
+  };
+
+  // Function to handle image tap to advance
+  const handleImageTap = () => {
+    if (multiplePosts.length > 1) {
+      const nextIndex = (currentPostIndex + 1) % multiplePosts.length;
+      handleSelectPost(multiplePosts[nextIndex], nextIndex);
+
+      // If slideshow is active, restart the timer
+      if (slideshowActive) {
+        if (slideshowTimerRef.current) {
+          window.clearTimeout(slideshowTimerRef.current);
+        }
+        if (slideshowAnimationRef.current) {
+          slideshowAnimationRef.current.stop();
+        }
+
+        progressAnimationValue.setValue(0);
+        advanceSlideshow();
+      }
+    }
+  };
+
+  // Function to start the slideshow
+  const startSlideshow = () => {
+    if (multiplePosts.length <= 1) return;
+
+    setSlideshowActive(true);
+    advanceSlideshow();
+  };
+
+  // Function to stop the slideshow
+  const stopSlideshow = () => {
+    setSlideshowActive(false);
+    if (slideshowTimerRef.current) {
+      window.clearTimeout(slideshowTimerRef.current);
+      slideshowTimerRef.current = null;
+    }
+    if (slideshowAnimationRef.current) {
+      slideshowAnimationRef.current.stop();
+      slideshowAnimationRef.current = null;
+    }
+    progressAnimationValue.setValue(0);
+    setSlideshowProgress(0);
+  };
+
+  // Function to toggle slideshow
+  const toggleSlideshow = () => {
+    if (slideshowActive) {
+      stopSlideshow();
+    } else {
+      startSlideshow();
+    }
+  };
+
+  // Function to advance slideshow to next image
+  const advanceSlideshow = () => {
+    if (!slideshowActive || multiplePosts.length <= 1) return;
+
+    // Reset progress
+    setSlideshowProgress(0);
+    progressAnimationValue.setValue(0);
+
+    // Animate progress bar
+    slideshowAnimationRef.current = Animated.timing(progressAnimationValue, {
+      toValue: 1,
+      duration: SLIDESHOW_TIMEOUT,
+      useNativeDriver: false,
+    });
+
+    slideshowAnimationRef.current.start();
+
+    // Set timer to move to next image
+    slideshowTimerRef.current = window.setTimeout(() => {
+      if (multiplePosts.length > 1) {
+        const nextIndex = (currentPostIndex + 1) % multiplePosts.length;
+        handleSelectPost(multiplePosts[nextIndex], nextIndex);
+        // Call advance slideshow again to continue the loop
+        advanceSlideshow();
+      }
+    }, SLIDESHOW_TIMEOUT);
+  };
+
+  // Listen to progress animation value changes
+  useEffect(() => {
+    const listener = progressAnimationValue.addListener(({ value }) => {
+      setSlideshowProgress(value);
+    });
+
+    return () => {
+      progressAnimationValue.removeListener(listener);
+    };
+  }, []);
+
+  // Now let's update the useEffect to start the slideshow correctly when the modal opens
+  useEffect(() => {
+    if (isVisible && isModalOpenRef.current && multiplePosts.length > 1) {
+      // Short delay before starting slideshow to ensure the modal is fully open
+      const timer = window.setTimeout(() => {
+        startSlideshow();
+      }, 500);
+
+      return () => window.clearTimeout(timer);
+    }
+  }, [isVisible, isModalOpenRef.current, multiplePosts.length]);
+
+  // Handle advancing slideshow or stopping it when navigating manually
+  useEffect(() => {
+    if (slideshowActive && multiplePosts.length > 1) {
+      // If we manually changed the image, restart the timer
+      if (slideshowTimerRef.current) {
+        window.clearTimeout(slideshowTimerRef.current);
+      }
+      if (slideshowAnimationRef.current) {
+        slideshowAnimationRef.current.stop();
+      }
+
+      progressAnimationValue.setValue(0);
+      setSlideshowProgress(0);
+
+      // Start new timer
+      slideshowAnimationRef.current = Animated.timing(progressAnimationValue, {
+        toValue: 1,
+        duration: SLIDESHOW_TIMEOUT,
+        useNativeDriver: false,
+      });
+
+      slideshowAnimationRef.current.start();
+
+      slideshowTimerRef.current = window.setTimeout(() => {
+        const nextIndex = (currentPostIndex + 1) % multiplePosts.length;
+        handleSelectPost(multiplePosts[nextIndex], nextIndex);
+      }, SLIDESHOW_TIMEOUT);
+    }
+
+    return () => {
+      if (slideshowTimerRef.current) {
+        window.clearTimeout(slideshowTimerRef.current);
+      }
+    };
+  }, [currentPostIndex, slideshowActive]);
+
   // Function to share the image
   const shareImage = async () => {
-    if (selectedDay) {
+    if (selectedPost) {
       try {
         // Trigger haptic feedback
         if (Platform.OS !== "web") {
@@ -226,8 +481,8 @@ const ImageModal: React.FC<ImageModalProps> = ({
         }
 
         await Share.share({
-          url: selectedDay.imageUrl,
-          message: `Check out my progress on day ${selectedDay.goalDay}: ${selectedDay.caption}`,
+          url: selectedPost.imageUrl,
+          message: `Check out my progress on day ${selectedPost.goalDay}: ${selectedPost.caption}`,
         });
       } catch (error) {
         console.error("Error sharing image:", error);
@@ -263,7 +518,7 @@ const ImageModal: React.FC<ImageModalProps> = ({
 
   // Function to download the image
   const downloadImage = async () => {
-    if (selectedDay) {
+    if (selectedPost) {
       try {
         setIsDownloading(true);
         // Trigger haptic feedback when download starts
@@ -274,8 +529,8 @@ const ImageModal: React.FC<ImageModalProps> = ({
         if (Platform.OS === "web") {
           // Web platform handling
           const link = document.createElement("a");
-          link.href = selectedDay.imageUrl;
-          link.download = `day_${selectedDay.goalDay}.jpg`;
+          link.href = selectedPost.imageUrl;
+          link.download = `day_${selectedPost.goalDay}.jpg`;
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
@@ -294,11 +549,11 @@ const ImageModal: React.FC<ImageModalProps> = ({
           if (status === "granted") {
             // Create a local file URL for the image
             const fileUri =
-              FileSystem.documentDirectory + `day_${selectedDay.goalDay}.jpg`;
+              FileSystem.documentDirectory + `day_${selectedPost.goalDay}.jpg`;
 
             // Download the image
             const downloadResult = await FileSystem.downloadAsync(
-              selectedDay.imageUrl,
+              selectedPost.imageUrl,
               fileUri
             );
 
@@ -340,6 +595,89 @@ const ImageModal: React.FC<ImageModalProps> = ({
     }
   };
 
+  // Add function to handle like toggling
+  const handleLikeToggle = () => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
+
+    if (isLiked) {
+      setLikeCount((prev) => Math.max(0, prev - 1));
+    } else {
+      setLikeCount((prev) => prev + 1);
+    }
+
+    setIsLiked(!isLiked);
+  };
+
+  // Initialize like state when post changes
+  useEffect(() => {
+    if (selectedPost) {
+      // Simulate random like count between 0-20 for demo
+      const randomLikes = Math.floor(Math.random() * 20);
+      setLikeCount(randomLikes);
+      setIsLiked(false);
+    }
+  }, [selectedPost?.id]);
+
+  // Render a post thumbnail for multiple posts view
+  const renderPostThumbnail = ({
+    item,
+    index,
+  }: {
+    item: Log;
+    index: number;
+  }) => {
+    const isSelected = selectedPost?.id === item.id;
+
+    return (
+      <TouchableOpacity
+        key={item.id}
+        style={[
+          styles.postThumbnail,
+          isSelected && styles.selectedPostThumbnail,
+        ]}
+        onPress={() => handleSelectPost(item, index)}
+        disabled={isAnimating}
+        activeOpacity={0.9}
+      >
+        <Image
+          source={{ uri: item.imageUrl }}
+          style={styles.thumbnailImage}
+          fadeDuration={0}
+        />
+        {isGroupGoal && (
+          <View style={styles.thumbnailOverlay}>
+            <Image
+              source={{ uri: item.postedBy.profilePic }}
+              style={styles.thumbnailUserAvatar}
+              fadeDuration={0}
+            />
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  // Render pagination dots
+  const renderPaginationDots = () => {
+    if (multiplePosts.length <= 1) return null;
+
+    return (
+      <View style={styles.paginationContainer}>
+        {multiplePosts.map((_, index) => (
+          <View
+            key={index}
+            style={[
+              styles.paginationDot,
+              index === currentPostIndex && styles.paginationDotActive,
+            ]}
+          />
+        ))}
+      </View>
+    );
+  };
+
   return (
     <Modal
       transparent={true}
@@ -367,15 +705,59 @@ const ImageModal: React.FC<ImageModalProps> = ({
           </Animated.View>
         )}
 
-        <TouchableOpacity
-          style={styles.modalOverlayTouch}
-          activeOpacity={1}
-          onPress={handleClose}
-          disabled={isAnimating}
-        >
-          {selectedDay && (
+        <View style={styles.modalOverlayTouch}>
+          {selectedPost && (
             <View style={styles.modalContainer}>
-              {/* Animated expanding image */}
+              {/* Modal Content */}
+
+              {/* First: Bottom content with fixed height */}
+              <Animated.View
+                style={[
+                  styles.modalContentContainer,
+                  {
+                    opacity: animatedValues.contentOpacity,
+                    height: FIXED_BOTTOM_SECTION_HEIGHT,
+                  },
+                ]}
+                pointerEvents={isAnimating ? "none" : "auto"}
+              >
+                {/* Header with close button - no profile picture */}
+                <View style={styles.profileContainer}>
+                  <View style={styles.headerTextSection}>
+                    <Text style={styles.modalTitle}>
+                      Day {selectedPost?.goalDay}
+                    </Text>
+                    <Text style={styles.modalDate}>
+                      {selectedPost?.month.split(" ")[0]} {selectedPost?.day}
+                    </Text>
+                  </View>
+
+                  {/* Close button moved to top right */}
+                  <TouchableOpacity
+                    onPress={handleClose}
+                    style={styles.headerCloseButton}
+                  >
+                    <Ionicons name="close" size={20} color="white" />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Make the entire content area scrollable */}
+                <ScrollView
+                  style={styles.fullContentScrollContainer}
+                  showsVerticalScrollIndicator={true}
+                  scrollIndicatorInsets={{ right: -3 }}
+                  contentContainerStyle={styles.fullContentContainer}
+                  persistentScrollbar={true}
+                  indicatorStyle="white"
+                >
+                  {/* Caption directly in the scroll view */}
+                  <Text style={styles.modalCaption}>
+                    {selectedPost?.caption}
+                  </Text>
+                </ScrollView>
+              </Animated.View>
+
+              {/* Second: Animated expanding image container */}
               <Animated.View
                 style={[
                   styles.expandingImageContainer,
@@ -388,94 +770,148 @@ const ImageModal: React.FC<ImageModalProps> = ({
                   },
                 ]}
               >
-                {/* Low-res placeholder that's always visible during animation */}
-                <Image
-                  source={{ uri: selectedDay.imageUrl }}
-                  style={styles.expandingImage}
-                  resizeMode="cover"
-                  progressiveRenderingEnabled={true}
-                  fadeDuration={0}
-                />
-
-                {/* High-res image that loads once animation is complete */}
-                {shouldLoadHighRes && (
-                  <Animated.View
-                    style={[
-                      StyleSheet.absoluteFill,
-                      { opacity: isHighResLoaded ? 1 : 0 },
-                    ]}
-                  >
+                {/* Main image container */}
+                <View style={{ flex: 1 }}>
+                  {/* Static image container without any animations */}
+                  <View style={StyleSheet.absoluteFill}>
+                    {/* Single image with no transition - key forces a complete re-render */}
                     <Image
-                      source={{
-                        uri: `${
-                          selectedDay.imageUrl
-                        }?quality=high&timestamp=${new Date().getTime()}`,
-                      }}
-                      style={styles.expandingImageHighRes}
+                      key={`img-${selectedPost?.id}`}
+                      source={{ uri: selectedPost?.imageUrl }}
+                      style={styles.expandingImage}
                       resizeMode="cover"
-                      onLoadEnd={() => setIsHighResLoaded(true)}
+                      fadeDuration={0}
                     />
-                  </Animated.View>
-                )}
-              </Animated.View>
-
-              {/* Content that fades in after expansion */}
-              <Animated.View
-                style={[
-                  styles.modalContentContainer,
-                  { opacity: animatedValues.contentOpacity },
-                ]}
-                pointerEvents={isAnimating ? "none" : "auto"}
-              >
-                <View style={styles.modalHeader}>
-                  <View>
-                    <Text style={styles.modalTitle}>
-                      Day {selectedDay.goalDay}
-                    </Text>
-                    <Text style={styles.modalDate}>
-                      {selectedDay.month.split(" ")[0]} {selectedDay.day}
-                    </Text>
                   </View>
-                  <TouchableOpacity
-                    onPress={handleClose}
-                    style={styles.modalCloseButton}
-                  >
-                    <Ionicons name="close" size={24} color="white" />
-                  </TouchableOpacity>
-                </View>
 
-                <Text style={styles.modalCaption}>{selectedDay.caption}</Text>
+                  {/* User profile picture in top left of image (for group goals) */}
+                  {isGroupGoal && selectedPost?.postedBy && (
+                    <View style={styles.imageProfileContainer}>
+                      <Image
+                        source={{ uri: selectedPost.postedBy.profilePic }}
+                        style={styles.imageProfilePic}
+                        fadeDuration={0}
+                      />
+                      <Text style={styles.imageProfileName}>
+                        {selectedPost.postedBy.name}
+                      </Text>
+                    </View>
+                  )}
 
-                <View style={styles.modalActions}>
-                  <TouchableOpacity
-                    style={styles.modalActionButton}
-                    onPress={downloadImage}
-                    disabled={isDownloading}
+                  {/* Controls and overlay elements */}
+                  <View
+                    style={StyleSheet.absoluteFill}
+                    pointerEvents="box-none"
                   >
-                    <Ionicons
-                      name={
-                        isDownloading ? "hourglass-outline" : "download-outline"
-                      }
-                      size={22}
-                      color="white"
+                    {/* Slideshow progress bar */}
+                    {multiplePosts.length > 1 && (
+                      <View style={styles.progressBarContainer}>
+                        <View style={styles.progressBarBackground}>
+                          <Animated.View
+                            style={[
+                              styles.progressBarFill,
+                              {
+                                width: progressAnimationValue.interpolate({
+                                  inputRange: [0, 1],
+                                  outputRange: ["0%", "100%"],
+                                }),
+                              },
+                            ]}
+                          />
+                        </View>
+                      </View>
+                    )}
+
+                    {/* Slideshow control button */}
+                    {multiplePosts.length > 1 && (
+                      <TouchableOpacity
+                        style={styles.slideshowButton}
+                        onPress={toggleSlideshow}
+                      >
+                        <Ionicons
+                          name={slideshowActive ? "pause" : "play"}
+                          size={16}
+                          color="white"
+                        />
+                      </TouchableOpacity>
+                    )}
+
+                    {/* Pagination dots at bottom of image */}
+                    {renderPaginationDots()}
+
+                    {/* Action buttons */}
+                    <View
+                      style={styles.actionsOverlay}
+                      pointerEvents="box-none"
+                    >
+                      {/* Like button */}
+                      <TouchableOpacity
+                        style={styles.imageActionButton}
+                        onPress={handleLikeToggle}
+                        activeOpacity={0.7}
+                      >
+                        <Ionicons
+                          name={isLiked ? "heart" : "heart-outline"}
+                          size={22}
+                          color={isLiked ? "#ff375f" : "white"}
+                        />
+                        {likeCount > 0 && (
+                          <Text style={styles.likeCountText}>{likeCount}</Text>
+                        )}
+                      </TouchableOpacity>
+
+                      {/* Download button */}
+                      <TouchableOpacity
+                        style={styles.imageActionButton}
+                        onPress={downloadImage}
+                        disabled={isDownloading}
+                      >
+                        <Ionicons
+                          name={
+                            isDownloading
+                              ? "hourglass-outline"
+                              : "download-outline"
+                          }
+                          size={22}
+                          color="white"
+                        />
+                      </TouchableOpacity>
+
+                      {/* Share button */}
+                      <TouchableOpacity
+                        style={styles.imageActionButton}
+                        onPress={shareImage}
+                      >
+                        <Ionicons
+                          name="share-outline"
+                          size={22}
+                          color="white"
+                        />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Touchable area for advancing slides - place after all other controls */}
+                  {multiplePosts.length > 1 && (
+                    <TouchableOpacity
+                      style={[StyleSheet.absoluteFill, { zIndex: 5 }]} // Lower zIndex to allow buttons to work
+                      activeOpacity={1}
+                      onPress={handleImageTap}
                     />
-                    <Text style={styles.modalActionText}>
-                      {isDownloading ? "Downloading..." : "Download"}
-                    </Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={styles.modalActionButton}
-                    onPress={shareImage}
-                  >
-                    <Ionicons name="share-outline" size={22} color="white" />
-                    <Text style={styles.modalActionText}>Share</Text>
-                  </TouchableOpacity>
+                  )}
                 </View>
               </Animated.View>
+
+              {/* Add a background overlay touchable to handle closing modal */}
+              <TouchableOpacity
+                style={styles.backgroundCloseButton}
+                activeOpacity={1}
+                onPress={handleClose}
+                disabled={isAnimating}
+              />
             </View>
           )}
-        </TouchableOpacity>
+        </View>
       </Animated.View>
     </Modal>
   );
@@ -494,8 +930,9 @@ const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
     width: "100%",
-    justifyContent: "center",
+    justifyContent: "flex-end",
     alignItems: "center",
+    position: "relative",
   },
   expandingImageContainer: {
     position: "absolute",
@@ -506,32 +943,50 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 5,
     elevation: 5,
+    zIndex: 10,
   },
   expandingImage: {
     width: "100%",
     height: "100%",
     backgroundColor: "#1F1F1F",
+    zIndex: 1, // Ensure image is at base level
   },
   expandingImageHighRes: {
     width: "100%",
     height: "100%",
   },
   modalContentContainer: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
+    width: "100%",
     backgroundColor: "#1F1F1F",
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     paddingTop: 8,
-    paddingBottom: 30,
+    zIndex: 20,
+    display: "flex",
+    flexDirection: "column",
   },
-  modalHeader: {
+  // Profile container styling
+  profileContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.1)",
+  },
+  headerTextSection: {
+    flex: 1,
+  },
+  // Header close button
+  headerCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "rgba(0, 0, 0, 0.3)",
+    justifyContent: "center",
+    alignItems: "center",
   },
   modalTitle: {
     fontSize: 20,
@@ -544,35 +999,97 @@ const styles = StyleSheet.create({
     color: "rgba(255, 255, 255, 0.6)",
     marginTop: 4,
   },
-  modalCloseButton: {
-    padding: 4,
+  captionOuterContainer: {
+    flex: 1,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255, 255, 255, 0.1)",
+    marginTop: 8,
+    marginHorizontal: 16,
+  },
+  captionScrollContainer: {
+    flex: 1,
+    paddingTop: 12,
+  },
+  captionContent: {
+    paddingBottom: 20,
+    paddingRight: 8,
   },
   modalCaption: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
     fontSize: 16,
     fontFamily: FontFamily.Medium,
     color: "white",
     lineHeight: 24,
+    marginTop: 8,
   },
-  modalActions: {
-    flexDirection: "row",
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255, 255, 255, 0.1)",
-    padding: 16,
-  },
-  modalActionButton: {
-    flexDirection: "row",
+  // Image actions overlay
+  actionsOverlay: {
+    position: "absolute",
+    bottom: 20,
+    right: 20,
+    flexDirection: "column",
     alignItems: "center",
-    marginRight: 30,
+    gap: 16,
+    zIndex: 20,
+  },
+  imageActionButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 12,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+    elevation: 5,
+  },
+  // Thumbnails section styling
+  imageTopControls: {
+    position: "absolute",
+    top: 20,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 8,
+    alignItems: "center",
+    zIndex: 20,
+  },
+  topThumbnailsContainer: {
     paddingVertical: 8,
+    paddingHorizontal: 8,
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    borderRadius: 12,
   },
-  modalActionText: {
-    color: "white",
-    fontSize: 16,
-    fontFamily: FontFamily.Medium,
-    marginLeft: 8,
+  postThumbnail: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    marginHorizontal: 5,
+    overflow: "hidden",
+    borderWidth: 2,
+    borderColor: "rgba(255, 255, 255, 0.3)",
   },
+  selectedPostThumbnail: {
+    borderColor: "#0E96FF",
+  },
+  thumbnailImage: {
+    width: "100%",
+    height: "100%",
+  },
+  thumbnailOverlay: {
+    position: "absolute",
+    bottom: 3,
+    right: 3,
+  },
+  thumbnailUserAvatar: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 1,
+    borderColor: "white",
+  },
+  // Notification styling
   notificationContainer: {
     position: "absolute",
     top: 0,
@@ -601,6 +1118,105 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     fontFamily: FontFamily.Medium,
     fontSize: 14,
+  },
+  backgroundCloseButton: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 5, // Below content but above overlay
+  },
+  fullContentScrollContainer: {
+    flex: 1,
+    marginTop: 8,
+  },
+  fullContentContainer: {
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+  },
+  // New styles for profile picture in image
+  imageProfileContainer: {
+    position: "absolute",
+    top: 16,
+    left: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.5)",
+    borderRadius: 20,
+    padding: 6,
+    zIndex: 30,
+  },
+  imageProfilePic: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: "white",
+  },
+  imageProfileName: {
+    color: "white",
+    fontSize: 14,
+    fontFamily: FontFamily.SemiBold,
+    marginLeft: 8,
+  },
+  // Progress bar styles
+  progressBarContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 4,
+    zIndex: 30,
+  },
+  progressBarBackground: {
+    width: "100%",
+    height: 4,
+    backgroundColor: "rgba(255, 255, 255, 0.2)",
+  },
+  progressBarFill: {
+    height: 4,
+    backgroundColor: "#0E96FF",
+  },
+  // Slideshow control button
+  slideshowButton: {
+    position: "absolute",
+    top: 20,
+    right: 20,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 30,
+  },
+  // Pagination dots
+  paginationContainer: {
+    position: "absolute",
+    bottom: 16,
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 20,
+  },
+  paginationDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "rgba(255, 255, 255, 0.4)",
+    marginHorizontal: 4,
+  },
+  paginationDotActive: {
+    backgroundColor: "#0E96FF",
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+  },
+  // Style for like count
+  likeCountText: {
+    color: "white",
+    fontSize: 12,
+    fontFamily: FontFamily.SemiBold,
+    marginTop: 4,
   },
 });
 

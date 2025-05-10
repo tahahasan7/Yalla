@@ -58,7 +58,7 @@ export default function GoalDetailsScreen() {
   const [isNavigating, setIsNavigating] = useState(false);
 
   // State variables for the image modal
-  const [selectedDay, setSelectedDay] = useState<Log | null>(null);
+  const [selectedDay, setSelectedDay] = useState<Log | Log[] | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [imagePosition, setImagePosition] = useState({
     x: 0,
@@ -95,7 +95,12 @@ export default function GoalDetailsScreen() {
     progress: params.progress ? parseInt(params.progress as string) : undefined,
     completed: params.completed === "true",
     completedDate: params.completedDate as string | undefined,
+    goalType: params.goalType as "solo" | "group" | undefined,
+    participants: undefined,
   };
+
+  // Check if this is a group goal
+  const isGroupGoal = goal.goalType === "group";
 
   // Get the logs from the goal data
   const timelineData = goalFromData?.logs || [];
@@ -215,7 +220,10 @@ export default function GoalDetailsScreen() {
   }, [navigation, isNavigating]);
 
   // Function to show the day popup
-  const showDayModal = (day: Log, dayKey: string) => {
+  const showDayModal = (day: Log | Log[], dayKey: string) => {
+    // If we have multiple logs, use the first one as default
+    const selectedLogItem = Array.isArray(day) ? day[0] : day;
+
     // Store the selected day data
     setSelectedDay(day);
 
@@ -502,12 +510,14 @@ export default function GoalDetailsScreen() {
             sortedMonths={sortedMonths}
             onDayPress={showDayModal}
             registerDayRef={registerDayRef}
+            isGroupGoal={isGroupGoal}
           />
         ) : (
           <Timeline
             sortedMonthsWithSortedDays={sortedMonthsWithSortedDays}
             onDayPress={showDayModal}
             registerDayRef={registerDayRef}
+            isGroupGoal={isGroupGoal}
           />
         )}
       </ScrollView>
@@ -518,6 +528,7 @@ export default function GoalDetailsScreen() {
         isVisible={modalVisible}
         imagePosition={imagePosition}
         onClose={hideModal}
+        isGroupGoal={isGroupGoal}
       />
 
       {/* Gradient Background for Add Button */}
@@ -799,5 +810,42 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.Regular,
     color: "white",
     marginLeft: 8,
+  },
+  // New styles for group participants
+  participantsSection: {
+    paddingHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  participantsTitle: {
+    fontSize: 16,
+    fontFamily: FontFamily.SemiBold,
+    color: "white",
+    marginBottom: 12,
+  },
+  participantsList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  participantItem: {
+    flexDirection: "column",
+    alignItems: "center",
+    marginRight: 20,
+    marginBottom: 10,
+    width: 60,
+  },
+  participantAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    marginBottom: 4,
+    borderWidth: 2,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+  },
+  participantName: {
+    fontSize: 12,
+    fontFamily: FontFamily.Medium,
+    color: "white",
+    textAlign: "center",
   },
 });

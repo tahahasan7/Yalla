@@ -37,11 +37,15 @@ export default function GoalsScreen() {
       case "completed":
         return GOALS.filter((goal) => goal.completed);
       case "solo":
-        // Placeholder for solo goals filtering
-        return GOALS.filter((goal) => !goal.completed);
+        // Filter for solo goals
+        return GOALS.filter(
+          (goal) => goal.goalType === "solo" && !goal.completed
+        );
       case "group":
-        // Placeholder for group goals filtering
-        return GOALS.filter((goal) => !goal.completed);
+        // Filter for group goals
+        return GOALS.filter(
+          (goal) => goal.goalType === "group" && !goal.completed
+        );
       case "all":
       default:
         return GOALS.filter((goal) => !goal.completed);
