@@ -17,24 +17,41 @@ interface EndingDateSectionProps {
   setEndDate: boolean;
   toggleEndDate: (value: boolean) => void;
   scrollViewRef: { current: ScrollView | null };
+  endDateType: string;
+  setEndDateType: (type: string) => void;
+  specificEndDate: Date | null;
+  setSpecificEndDate: (date: Date | null) => void;
+  durationValue: string;
+  setDurationValue: (value: string) => void;
+  durationType: string;
+  setDurationType: (type: string) => void;
 }
 
 const EndingDateSection: React.FC<EndingDateSectionProps> = ({
   setEndDate,
   toggleEndDate,
   scrollViewRef,
+  endDateType,
+  setEndDateType,
+  specificEndDate,
+  setSpecificEndDate,
+  durationValue,
+  setDurationValue,
+  durationType,
+  setDurationType,
 }) => {
-  // End date related states
-  const [endDateType, setEndDateType] = useState("duration");
-  const [specificEndDate, setSpecificEndDate] = useState<Date | null>(null);
-  const [durationValue, setDurationValue] = useState("");
-  const [durationType, setDurationType] = useState("weeks");
+  // Local state for UI controls
   const [showCalendar, setShowCalendar] = useState(false);
 
   const endDateOptionsRef = useRef(null);
   const calendarRef = useRef(null);
   const durationTypeRef = useRef(null);
   const durationInputRef = useRef<TextInput>(null);
+
+  // Get max duration based on selected type
+  const getMaxDuration = () => {
+    return durationType === "weeks" ? 52 : 12; // 52 weeks or 12 months (1 year)
+  };
 
   // Handle duration input focus
   const handleDurationInputFocus = () => {
@@ -86,6 +103,14 @@ const EndingDateSection: React.FC<EndingDateSectionProps> = ({
 
   const handleDurationTypeChange = (type: string) => {
     setDurationType(type);
+    // Validate the duration value when changing type
+    if (durationValue) {
+      const numValue = parseInt(durationValue, 10);
+      const maxValue = type === "weeks" ? 52 : 12;
+      if (numValue > maxValue) {
+        setDurationValue(maxValue.toString());
+      }
+    }
   };
 
   // Format a date to display in the UI
@@ -216,16 +241,24 @@ const EndingDateSection: React.FC<EndingDateSectionProps> = ({
                   ]}
                   value={durationValue}
                   onChangeText={(text) => {
-                    // Only allow numeric input and prevent 0
-                    if (/^[1-9]\d*$/.test(text) || text === "") {
-                      setDurationValue(text);
+                    // Only allow numeric input, prevent 0, and enforce max duration
+                    if (text === "") {
+                      setDurationValue("");
+                    } else if (/^[1-9]\d*$/.test(text)) {
+                      const numValue = parseInt(text, 10);
+                      const maxDuration = getMaxDuration();
+                      if (numValue <= maxDuration) {
+                        setDurationValue(text);
+                      } else {
+                        setDurationValue(maxDuration.toString());
+                      }
                     }
                   }}
                   onFocus={handleDurationInputFocus}
                   keyboardType="number-pad"
                   placeholder="Enter duration"
                   placeholderTextColor="#777"
-                  maxLength={3}
+                  maxLength={2} // Max 2 digits (52 weeks or 12 months)
                 />
               </View>
               <View style={styles.durationTypeContainer} ref={durationTypeRef}>
@@ -248,22 +281,6 @@ const EndingDateSection: React.FC<EndingDateSectionProps> = ({
                 <TouchableOpacity
                   style={[
                     styles.durationTypeButton,
-                    durationType === "days" && styles.durationTypeActive,
-                  ]}
-                  onPress={() => handleDurationTypeChange("days")}
-                >
-                  <Text
-                    style={[
-                      styles.durationTypeText,
-                      durationType === "days" && styles.durationTypeTextActive,
-                    ]}
-                  >
-                    Days
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.durationTypeButton,
                     durationType === "months" && styles.durationTypeActive,
                   ]}
                   onPress={() => handleDurationTypeChange("months")}
@@ -279,6 +296,11 @@ const EndingDateSection: React.FC<EndingDateSectionProps> = ({
                   </Text>
                 </TouchableOpacity>
               </View>
+              {durationValue && (
+                <Text style={styles.durationHint}>
+                  Maximum duration: 1 year ({getMaxDuration()} {durationType})
+                </Text>
+              )}
             </View>
           )}
         </View>
@@ -397,6 +419,12 @@ const styles = StyleSheet.create({
   },
   durationTypeTextActive: {
     color: "white",
+  },
+  durationHint: {
+    color: "#888",
+    fontSize: 12,
+    fontFamily: FontFamily.Regular,
+    textAlign: "center",
   },
 });
 

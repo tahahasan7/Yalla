@@ -1,5 +1,5 @@
+import { COLOR_OPTIONS, getColorName } from "@/constants/colors";
 import { FontFamily } from "@/constants/fonts";
-import { AVAILABLE_COLORS } from "@/constants/goalData";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -19,7 +19,7 @@ import Icon from "../../common/Icon";
 const { height } = Dimensions.get("window");
 
 const DRAG_THRESHOLD = 120; // Distance user needs to drag to dismiss
-const COLORS = AVAILABLE_COLORS;
+const COLORS = COLOR_OPTIONS.map((option) => option.color);
 
 interface ColorBottomSheetProps {
   visible: boolean;
@@ -35,14 +35,15 @@ const ColorBottomSheet = (props: ColorBottomSheetProps) => {
   const dragY = useRef(new Animated.Value(0)).current;
 
   // State to track temporary color selection (not yet saved)
-  const [tempSelectedColor, setTempSelectedColor] = useState(
-    props.selectedColor
+  const [tempSelectedColor, setTempSelectedColor] = useState<string | null>(
+    props.selectedColor || null
   );
 
   // Update tempSelectedColor when the sheet becomes visible
   useEffect(() => {
     if (props.visible) {
-      setTempSelectedColor(props.selectedColor);
+      // Only set the temp color if there's a selected color
+      setTempSelectedColor(props.selectedColor || null);
     }
   }, [props.visible, props.selectedColor]);
 
@@ -125,12 +126,20 @@ const ColorBottomSheet = (props: ColorBottomSheetProps) => {
 
   // Save the selected color and close the modal
   const saveAndClose = () => {
-    props.onColorSelect(tempSelectedColor);
+    if (tempSelectedColor) {
+      props.onColorSelect(tempSelectedColor);
+    }
     closeWithoutSaving();
   };
 
   // Combine modal animation and drag for final transform
   const combinedTransform = Animated.add(modalAnimation, dragY);
+
+  // Get the color name to display
+  const getSelectedColorName = () => {
+    if (!tempSelectedColor) return "";
+    return getColorName(tempSelectedColor);
+  };
 
   return (
     <Modal
@@ -188,11 +197,20 @@ const ColorBottomSheet = (props: ColorBottomSheetProps) => {
               This color will be set to your goal card.
             </Text>
 
-            {/* Divider */}
-            {/* <View style={styles.divider} /> */}
-
-            {/* Color selection */}
-            {/* <Text style={styles.chooseText}>Choose a color</Text> */}
+            {/* Show selected color name if a color is selected */}
+            {tempSelectedColor && (
+              <View style={styles.selectedColorNameContainer}>
+                <View
+                  style={[
+                    styles.selectedColorPreview,
+                    { backgroundColor: tempSelectedColor },
+                  ]}
+                />
+                <Text style={styles.selectedColorName}>
+                  {getSelectedColorName()}
+                </Text>
+              </View>
+            )}
 
             {/* Color grid */}
             <View style={styles.colorGrid}>
@@ -216,7 +234,14 @@ const ColorBottomSheet = (props: ColorBottomSheetProps) => {
             </View>
 
             {/* Save button */}
-            <TouchableOpacity style={styles.saveButton} onPress={saveAndClose}>
+            <TouchableOpacity
+              style={[
+                styles.saveButton,
+                !tempSelectedColor && styles.saveButtonDisabled,
+              ]}
+              onPress={saveAndClose}
+              disabled={!tempSelectedColor}
+            >
               <Text style={styles.saveButtonText}>Save</Text>
             </TouchableOpacity>
           </View>
@@ -302,6 +327,25 @@ const styles = StyleSheet.create({
     color: "#BBBBBB",
     marginBottom: 16,
   },
+  selectedColorNameContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#2A2A2A",
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 16,
+  },
+  selectedColorPreview: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    marginRight: 10,
+  },
+  selectedColorName: {
+    fontFamily: FontFamily.Medium,
+    fontSize: 16,
+    color: "#FFFFFF",
+  },
   divider: {
     height: 1,
     backgroundColor: "rgba(255, 255, 255, 0.2)",
@@ -345,6 +389,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     alignItems: "center",
     marginTop: 10,
+  },
+  saveButtonDisabled: {
+    backgroundColor: "#444444",
   },
   saveButtonText: {
     fontFamily: FontFamily.SemiBold,

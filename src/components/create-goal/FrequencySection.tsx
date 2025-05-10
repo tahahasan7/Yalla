@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { Icon } from "../common";
@@ -26,25 +27,13 @@ const FrequencySection: React.FC<FrequencySectionProps> = ({
   const infoIconRef = useRef<React.ElementRef<typeof TouchableOpacity>>(null);
   const { height: windowHeight } = Dimensions.get("window");
 
-  // Toggle flow info modal and position it
   const toggleFlowInfo = () => {
     if (!showFlowInfo && infoIconRef.current) {
-      // Get the position of the info icon for proper popup placement
-      infoIconRef.current.measure(
-        (
-          _x: number,
-          _y: number,
-          width: number,
-          height: number,
-          pageX: number,
-          pageY: number
-        ) => {
-          // Make sure the popup doesn't go off screen
-          const safeTop = Math.min(pageY + 40, windowHeight - 400);
-          setFlowInfoPosition({ top: safeTop });
-          setShowFlowInfo(true);
-        }
-      );
+      infoIconRef.current.measure((_x, _y, _w, _h, _pageX, pageY) => {
+        const safeTop = Math.min(pageY + 40, windowHeight - 400);
+        setFlowInfoPosition({ top: safeTop });
+        setShowFlowInfo(true);
+      });
     } else {
       setShowFlowInfo(false);
     }
@@ -58,7 +47,6 @@ const FrequencySection: React.FC<FrequencySectionProps> = ({
           <View style={styles.flowStateIconContainer}>
             <Icon name="Flowing" size={24} color="#fff" />
           </View>
-
           <View style={{ gap: 4 }}>
             <Text style={styles.flowStateTitle}>Flow state</Text>
             <Text style={styles.flowStateSubtitle}>
@@ -105,18 +93,19 @@ const FrequencySection: React.FC<FrequencySectionProps> = ({
         </View>
       </View>
 
-      {/* Flow State Info Modal */}
       <Modal
         visible={showFlowInfo}
-        transparent={true}
+        transparent
         animationType="fade"
         onRequestClose={toggleFlowInfo}
       >
-        <TouchableOpacity
-          style={styles.overlay}
-          activeOpacity={1}
-          onPress={toggleFlowInfo}
-        >
+        <View style={styles.overlay}>
+          {/* Invisible full-screen catcher */}
+          <TouchableWithoutFeedback onPress={toggleFlowInfo}>
+            <View style={StyleSheet.absoluteFillObject} />
+          </TouchableWithoutFeedback>
+
+          {/* The popup itself */}
           <View style={[styles.popupContainer, { top: flowInfoPosition.top }]}>
             <View style={styles.popupPointer} />
             <View style={styles.popupContent}>
@@ -132,62 +121,44 @@ const FrequencySection: React.FC<FrequencySectionProps> = ({
               </View>
               <ScrollView
                 style={styles.popupScrollView}
-                showsVerticalScrollIndicator={false}
+                showsVerticalScrollIndicator
               >
                 <Text style={styles.popupText}>
                   Flow states represent your progress and consistency with this
                   goal.
                 </Text>
                 <View style={styles.flowStatesList}>
-                  <View style={styles.flowStateItem}>
-                    <View style={styles.flowStateIconPopup}>
-                      <Icon name="Still" size={20} />
+                  {[
+                    { name: "Still", desc: "Just starting out", icon: "Still" },
+                    {
+                      name: "Kindling",
+                      desc: "Building momentum",
+                      icon: "Kindling",
+                    },
+                    {
+                      name: "Glowing",
+                      desc: "Consistent progress",
+                      icon: "Glowing",
+                    },
+                    { name: "Flowing", desc: "Mastery level", icon: "Flowing" },
+                  ].map((st) => (
+                    <View key={st.name} style={styles.flowStateItem}>
+                      <View style={styles.flowStateIconPopup}>
+                        <Icon name={st.icon} size={20} />
+                      </View>
+                      <View style={styles.flowStateTextContainer}>
+                        <Text style={styles.flowStateName}>{st.name}</Text>
+                        <Text style={styles.flowStateDescription}>
+                          {st.desc}
+                        </Text>
+                      </View>
                     </View>
-                    <View style={styles.flowStateTextContainer}>
-                      <Text style={styles.flowStateName}>Still</Text>
-                      <Text style={styles.flowStateDescription}>
-                        Just starting out
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.flowStateItem}>
-                    <View style={styles.flowStateIconPopup}>
-                      <Icon name="Kindling" size={20} />
-                    </View>
-                    <View style={styles.flowStateTextContainer}>
-                      <Text style={styles.flowStateName}>Kindling</Text>
-                      <Text style={styles.flowStateDescription}>
-                        Building momentum
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.flowStateItem}>
-                    <View style={styles.flowStateIconPopup}>
-                      <Icon name="Glowing" size={20} />
-                    </View>
-                    <View style={styles.flowStateTextContainer}>
-                      <Text style={styles.flowStateName}>Glowing</Text>
-                      <Text style={styles.flowStateDescription}>
-                        Consistent progress
-                      </Text>
-                    </View>
-                  </View>
-                  <View style={styles.flowStateItem}>
-                    <View style={styles.flowStateIconPopup}>
-                      <Icon name="Flowing" size={20} />
-                    </View>
-                    <View style={styles.flowStateTextContainer}>
-                      <Text style={styles.flowStateName}>Flowing</Text>
-                      <Text style={styles.flowStateDescription}>
-                        Mastery level
-                      </Text>
-                    </View>
-                  </View>
+                  ))}
                 </View>
               </ScrollView>
             </View>
           </View>
-        </TouchableOpacity>
+        </View>
       </Modal>
     </View>
   );
@@ -206,7 +177,6 @@ const styles = StyleSheet.create({
   },
   flowStateRow: {
     flexDirection: "row",
-    width: "100%",
     paddingHorizontal: 16,
     paddingTop: 16,
   },
@@ -224,14 +194,18 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.SemiBold,
     fontSize: 15,
   },
-  infoIcon: {
-    padding: 4,
-  },
   flowStateSubtitle: {
     color: "#797B79",
     fontSize: 13,
     marginBottom: 14,
     fontFamily: FontFamily.Regular,
+  },
+  infoIcon: {
+    padding: 4,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: "#313131",
   },
   frequencyRow: {
     flexDirection: "row",
@@ -261,33 +235,20 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.SemiBold,
     fontSize: 16,
   },
-  divider: {
-    height: 1,
-    backgroundColor: "#313131",
-  },
-  // Flow state popup styles
   overlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
+    flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.5)",
-    justifyContent: "center",
-    alignItems: "center",
   },
   popupContainer: {
     position: "absolute",
-    right: 20,
     left: 20,
+    right: 20,
     zIndex: 20,
-    flexDirection: "column",
-    alignItems: "flex-end", // Align to the right side
+    alignItems: "flex-end",
   },
   popupPointer: {
     width: 0,
     height: 0,
-    backgroundColor: "transparent",
     borderStyle: "solid",
     borderLeftWidth: 10,
     borderRightWidth: 10,
@@ -304,19 +265,14 @@ const styles = StyleSheet.create({
     width: "100%",
     maxHeight: 360,
     maxWidth: 350,
-    alignSelf: "flex-end",
     shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
+    shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 4.65,
     elevation: 8,
   },
   popupHeader: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 12,
   },
@@ -325,6 +281,12 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.SemiBold,
     color: "white",
   },
+  popupCloseIcon: {
+    padding: 10,
+  },
+  popupScrollView: {
+    maxHeight: 280,
+  },
   popupText: {
     fontSize: 15,
     fontFamily: FontFamily.Regular,
@@ -332,7 +294,6 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   flowStatesList: {
-    marginBottom: 20,
     backgroundColor: "hsl(0, 1.10%, 18.60%)",
     borderRadius: 20,
     padding: 12,
@@ -366,12 +327,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.Regular,
     color: "white",
     opacity: 0.8,
-  },
-  popupCloseIcon: {
-    padding: 10,
-  },
-  popupScrollView: {
-    maxHeight: 280,
   },
 });
 

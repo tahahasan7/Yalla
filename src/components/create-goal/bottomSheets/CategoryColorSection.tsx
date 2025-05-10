@@ -1,5 +1,5 @@
+import { getColorName } from "@/constants/colors";
 import { FontFamily } from "@/constants/fonts";
-import { getDefaultColor } from "@/constants/goalData";
 import { Ionicons } from "@expo/vector-icons";
 import React from "react";
 import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
@@ -11,7 +11,6 @@ interface CategoryColorSectionProps {
   setShowCategoryPicker: (show: boolean) => void;
   setShowColorPicker: (show: boolean) => void;
   getCategoryIcon: (categoryName: string) => any;
-  getColorName: (color: string) => string;
   setColor?: (color: string) => void;
 }
 
@@ -21,7 +20,6 @@ const CategoryColorSection: React.FC<CategoryColorSectionProps> = ({
   setShowCategoryPicker,
   setShowColorPicker,
   getCategoryIcon,
-  getColorName,
   setColor,
 }) => {
   // We don't associate colors with categories anymore
@@ -50,7 +48,9 @@ const CategoryColorSection: React.FC<CategoryColorSectionProps> = ({
           <View
             style={[
               styles.categoryIconContainer,
-              { backgroundColor: color || getDefaultColor() },
+              color
+                ? { backgroundColor: color }
+                : styles.noCategoryColorSelected,
             ]}
           >
             {getCategoryIcon(category)?.icon === "ionicons" ? (
@@ -85,7 +85,7 @@ const CategoryColorSection: React.FC<CategoryColorSectionProps> = ({
         <View
           style={[
             styles.colorPreview,
-            { backgroundColor: color || getDefaultColor() },
+            color ? { backgroundColor: color } : styles.noColorSelected,
             color ? styles.selectedColorPreview : null,
           ]}
         >
@@ -142,6 +142,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginLeft: "auto",
+  },
+  noCategoryColorSelected: {
+    backgroundColor: "#2A2A2A", // Darker background
+    borderWidth: 1,
+    borderColor: "#777",
+    borderStyle: "dashed",
   },
   noColorSelected: {
     backgroundColor: "transparent",

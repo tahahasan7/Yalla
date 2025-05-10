@@ -14,6 +14,7 @@ import React, {
   useState,
 } from "react";
 import {
+  Alert,
   Keyboard,
   Platform,
   ScrollView,
@@ -32,6 +33,22 @@ import ColorBottomSheet from "../../components/create-goal/bottomSheets/ColorBot
 import EndingDateSection from "../../components/create-goal/EndingDateSection";
 import FrequencySection from "../../components/create-goal/FrequencySection";
 
+// Interface for a goal object
+interface Goal {
+  id: string;
+  title: string;
+  type: "solo" | "group";
+  category: string;
+  color: string;
+  frequency: number;
+  hasEndDate: boolean;
+  endDateType?: "duration" | "specificDate";
+  durationValue?: string;
+  durationType?: string;
+  specificEndDate?: Date | null;
+  createdAt: Date;
+}
+
 export default function CreateGoalScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -47,6 +64,7 @@ export default function CreateGoalScreen() {
   const [flowInfoPosition, setFlowInfoPosition] = useState({ top: 150 });
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const flowButtonRef = useRef(null);
   const infoIconRef = useRef(null);
   const endDateOptionsRef = useRef(null);
@@ -202,6 +220,30 @@ export default function CreateGoalScreen() {
         ? durationValue.trim() !== ""
         : specificEndDate !== null));
 
+  // Add console log to help debug validation
+  useEffect(() => {
+    console.log("Validation state:", {
+      goalName: goalName.trim() !== "",
+      category: category !== "",
+      color: color !== "",
+      endDateCondition:
+        !setEndDate ||
+        (endDateType === "duration"
+          ? durationValue.trim() !== ""
+          : specificEndDate !== null),
+      isFormValid,
+    });
+  }, [
+    goalName,
+    category,
+    color,
+    setEndDate,
+    endDateType,
+    durationValue,
+    specificEndDate,
+    isFormValid,
+  ]);
+
   // Reset all form values to their defaults
   const resetAll = () => {
     // Perform reset operations with short timeouts to ensure they're processed
@@ -224,6 +266,74 @@ export default function CreateGoalScreen() {
 
       console.log("Reset complete");
     }, 0);
+  };
+
+  // Create a goal object from the form data
+  const createGoalObject = (): Goal => {
+    const goal: Goal = {
+      id: Date.now().toString(), // Generate a unique ID based on timestamp
+      title: goalName.trim(),
+      type: isSolo ? "solo" : "group",
+      category: category,
+      color: color,
+      frequency: frequency,
+      hasEndDate: setEndDate,
+      createdAt: new Date(),
+    };
+
+    if (setEndDate) {
+      goal.endDateType = endDateType as "duration" | "specificDate";
+
+      if (endDateType === "duration") {
+        goal.durationValue = durationValue;
+        goal.durationType = durationType;
+      } else {
+        goal.specificEndDate = specificEndDate;
+      }
+    }
+
+    return goal;
+  };
+
+  // Save the goal data
+  const saveGoal = () => {
+    if (!isFormValid || isSubmitting) return;
+
+    setIsSubmitting(true);
+
+    try {
+      // Create the goal object
+      const goal = createGoalObject();
+
+      // Log the goal data
+      console.log("Creating new goal:", goal);
+
+      // In a real app, you would save this to your database/state manager
+      // For now, we'll just simulate it with a success message
+
+      // Show success message
+      Alert.alert(
+        "Goal Created",
+        `Your '${goal.title}' goal has been created successfully!`,
+        [
+          {
+            text: "OK",
+            onPress: () => {
+              // Close the form after goal is created
+              handleClose();
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error("Error creating goal:", error);
+      Alert.alert(
+        "Error",
+        "There was a problem creating your goal. Please try again."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Add effect to check initial state
@@ -256,11 +366,6 @@ export default function CreateGoalScreen() {
   // Get the icon data for a given category name
   const getCategoryIcon = (categoryName: string) => {
     return CATEGORIES.find((cat) => cat.name === categoryName) || null;
-  };
-
-  // Simple color name function
-  const getColorName = (color: string) => {
-    return color;
   };
 
   return (
@@ -345,6 +450,7 @@ export default function CreateGoalScreen() {
             onChangeText={setGoalName}
             onFocus={() => setIsGoalNameFocused(true)}
             onBlur={() => setIsGoalNameFocused(false)}
+            returnKeyType="done"
           />
 
           {/* Category and Color Picker Section */}
@@ -354,7 +460,6 @@ export default function CreateGoalScreen() {
             setShowCategoryPicker={setShowCategoryPicker}
             setShowColorPicker={setShowColorPicker}
             getCategoryIcon={getCategoryIcon}
-            getColorName={getColorName}
             setColor={setColor}
           />
 
@@ -366,6 +471,14 @@ export default function CreateGoalScreen() {
             setEndDate={setEndDate}
             toggleEndDate={toggleEndDate}
             scrollViewRef={scrollViewRef}
+            endDateType={endDateType}
+            setEndDateType={setEndDateType}
+            specificEndDate={specificEndDate}
+            setSpecificEndDate={setSpecificEndDate}
+            durationValue={durationValue}
+            setDurationValue={setDurationValue}
+            durationType={durationType}
+            setDurationType={setDurationType}
           />
         </BottomSheetScrollView>
 
@@ -381,30 +494,26 @@ export default function CreateGoalScreen() {
               style={styles.resetButton}
               onPress={resetAll}
               activeOpacity={0.7}
+              disabled={isSubmitting}
             >
               <Text style={styles.resetButtonText}>Reset all</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[
                 styles.setGoalButton,
-                !isFormValid && styles.setGoalButtonDisabled,
+                (!isFormValid || isSubmitting) && styles.setGoalButtonDisabled,
               ]}
-              onPress={() => {
-                if (isFormValid) {
-                  // Handle setting the goal
-                  // This would be where you save the goal to your state/database
-                  handleClose();
-                }
-              }}
-              disabled={!isFormValid}
+              onPress={saveGoal}
+              disabled={!isFormValid || isSubmitting}
             >
               <Text
                 style={[
                   styles.setGoalButtonText,
-                  !isFormValid && styles.setGoalButtonTextDisabled,
+                  (!isFormValid || isSubmitting) &&
+                    styles.setGoalButtonTextDisabled,
                 ]}
               >
-                Set goal
+                {isSubmitting ? "Setting goal..." : "Set goal"}
               </Text>
             </TouchableOpacity>
           </View>

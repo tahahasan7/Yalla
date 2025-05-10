@@ -35,6 +35,10 @@ const CalendarPicker: React.FC<CalendarPickerProps> = ({
   const minDate = new Date(today);
   minDate.setDate(minDate.getDate() + 7);
 
+  // Calculate the maximum date (1 year from today)
+  const maxDate = new Date(today);
+  maxDate.setFullYear(maxDate.getFullYear() + 1);
+
   // Get days for calendar
   useEffect(() => {
     generateCalendarDays();
@@ -88,18 +92,54 @@ const CalendarPicker: React.FC<CalendarPickerProps> = ({
     setCalendarDays(days);
   };
 
-  // Navigate to previous month
+  // Check if a month is before the current month
+  const isBeforeCurrentMonth = (date: Date) => {
+    const currentMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const targetMonth = new Date(date.getFullYear(), date.getMonth(), 1);
+    return targetMonth < currentMonth;
+  };
+
+  // Navigate to previous month - but only for current month and future
   const goToPreviousMonth = () => {
     const prevMonth = new Date(currentMonth);
     prevMonth.setMonth(prevMonth.getMonth() - 1);
-    setCurrentMonth(prevMonth);
+
+    // Don't allow navigating to months before the current month
+    if (!isBeforeCurrentMonth(prevMonth)) {
+      setCurrentMonth(prevMonth);
+    }
   };
 
-  // Navigate to next month
+  // Navigate to next month - but only up to max date
   const goToNextMonth = () => {
+    console.log("Next month button clicked");
     const nextMonth = new Date(currentMonth);
     nextMonth.setMonth(nextMonth.getMonth() + 1);
-    setCurrentMonth(nextMonth);
+
+    // Prevent navigating beyond the maximum allowed date (1 year from today)
+    const maxMonth = new Date(maxDate);
+    maxMonth.setDate(1); // Set to first day of the max month
+
+    // Log values for debugging
+    console.log(
+      "Current month:",
+      currentMonth.getMonth(),
+      currentMonth.getFullYear()
+    );
+    console.log("Next month:", nextMonth.getMonth(), nextMonth.getFullYear());
+    console.log("Max month:", maxMonth.getMonth(), maxMonth.getFullYear());
+
+    // Simplified condition to fix potential issues
+    if (
+      nextMonth.getFullYear() < maxMonth.getFullYear() ||
+      (nextMonth.getFullYear() === maxMonth.getFullYear() &&
+        nextMonth.getMonth() <= maxMonth.getMonth())
+    ) {
+      console.log("Setting next month");
+      setCurrentMonth(nextMonth);
+    } else {
+      console.log("Can't go to next month - at max limit");
+    }
   };
 
   // Check if two dates are the same day (ignoring time)
@@ -113,13 +153,17 @@ const CalendarPicker: React.FC<CalendarPickerProps> = ({
 
   // Check if a date is today
   const isToday = (date: Date) => {
-    const today = new Date();
     return isSameDay(date, today);
   };
 
   // Check if a date is before min date (1 week from today)
   const isBeforeMinDate = (date: Date) => {
     return date < minDate;
+  };
+
+  // Check if a date is after max date (1 year from today)
+  const isAfterMaxDate = (date: Date) => {
+    return date > maxDate;
   };
 
   // Organize days into weeks for rendering
@@ -131,18 +175,65 @@ const CalendarPicker: React.FC<CalendarPickerProps> = ({
     return weeks;
   };
 
+  // Check if current month view is at the current month (can't go back further)
+  const isAtCurrentMonth = () => {
+    return (
+      currentMonth.getFullYear() === today.getFullYear() &&
+      currentMonth.getMonth() === today.getMonth()
+    );
+  };
+
+  // Check if current month view is at the max month limit
+  const isAtMaxMonth = () => {
+    const maxMonth = new Date(maxDate);
+    maxMonth.setDate(1); // First day of max month
+
+    const result =
+      currentMonth.getFullYear() === maxMonth.getFullYear() &&
+      currentMonth.getMonth() === maxMonth.getMonth();
+
+    console.log("Is at max month:", result);
+    return result;
+  };
+
   // Handle date selection only, without confirming/closing
   const handleDateSelect = (date: Date) => {
     // Only allow selection of dates at least 1 week in the future
-    if (!isBeforeMinDate(date)) {
+    // and not more than 1 year in the future
+    if (!isBeforeMinDate(date) && !isAfterMaxDate(date)) {
       onDateChange(date);
     }
   };
 
-  // Ensure we start with the current month that contains the min date
+  // Format a date for display
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    });
+  };
+
+  // Ensure we start with the current month
   useEffect(() => {
-    setCurrentMonth(new Date(minDate));
+    const startMonth = new Date(today);
+    console.log(
+      "Setting initial month:",
+      startMonth.getMonth(),
+      startMonth.getFullYear()
+    );
+    setCurrentMonth(startMonth);
   }, []);
+
+  // Debug current state
+  useEffect(() => {
+    console.log(
+      "Current month state:",
+      currentMonth.getMonth(),
+      currentMonth.getFullYear()
+    );
+    console.log("Max date:", maxDate.getMonth(), maxDate.getFullYear());
+  }, [currentMonth]);
 
   return (
     <View style={styles.expandedCalendarContainer}>
@@ -151,10 +242,18 @@ const CalendarPicker: React.FC<CalendarPickerProps> = ({
         <View style={styles.calendarMonthHeader}>
           <TouchableOpacity
             onPress={goToPreviousMonth}
-            style={styles.navigationButton}
+            style={[
+              styles.navigationButton,
+              isAtCurrentMonth() && styles.navigationButtonDisabled,
+            ]}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            disabled={isAtCurrentMonth()}
           >
-            <Ionicons name="chevron-back" size={20} color="white" />
+            <Ionicons
+              name="chevron-back"
+              size={20}
+              color={isAtCurrentMonth() ? "#555" : "white"}
+            />
           </TouchableOpacity>
           <Text style={styles.calendarMonthTitle}>
             {currentMonth.toLocaleString("default", {
@@ -180,9 +279,9 @@ const CalendarPicker: React.FC<CalendarPickerProps> = ({
           ))}
         </View>
 
-        {/* Min date notice */}
+        {/* Date restrictions notice */}
         <Text style={styles.minDateNotice}>
-          Select a date at least 1 week from today
+          Select a date between {formatDate(minDate)} and {formatDate(maxDate)}
         </Text>
 
         {/* Calendar Days Grid - Organized by weeks */}
@@ -198,6 +297,8 @@ const CalendarPicker: React.FC<CalendarPickerProps> = ({
                   isSameDay(dayInfo.date, selectedDate);
                 const isDayToday = isToday(dayInfo.date);
                 const isDayBeforeMinDate = isBeforeMinDate(dayInfo.date);
+                const isDayAfterMaxDate = isAfterMaxDate(dayInfo.date);
+                const isDisabled = isDayBeforeMinDate || isDayAfterMaxDate;
                 const isCurrentMonth = dayInfo.isCurrentMonth;
 
                 return (
@@ -209,16 +310,15 @@ const CalendarPicker: React.FC<CalendarPickerProps> = ({
                       isDayToday && styles.calendarDayToday,
                       !isCurrentMonth && styles.calendarDayFaded,
                       isDayBeforeMinDate && styles.calendarDayPast,
-                      pressed &&
-                        !isDayBeforeMinDate &&
-                        styles.calendarDayPressed,
+                      isDayAfterMaxDate && styles.calendarDayFuture,
+                      pressed && !isDisabled && styles.calendarDayPressed,
                     ]}
                     onPress={() => {
-                      if (dayInfo.date && !isDayBeforeMinDate) {
+                      if (dayInfo.date && !isDisabled) {
                         handleDateSelect(dayInfo.date);
                       }
                     }}
-                    disabled={isDayBeforeMinDate}
+                    disabled={isDisabled}
                     android_ripple={{
                       color: "rgba(255, 255, 255, 0.1)",
                       borderless: true,
@@ -232,6 +332,7 @@ const CalendarPicker: React.FC<CalendarPickerProps> = ({
                         isDayToday && styles.calendarDayTextToday,
                         !isCurrentMonth && styles.calendarDayTextFaded,
                         isDayBeforeMinDate && styles.calendarDayTextPast,
+                        isDayAfterMaxDate && styles.calendarDayTextFuture,
                       ]}
                     >
                       {dayInfo.date.getDate()}
@@ -271,6 +372,9 @@ const styles = StyleSheet.create({
   navigationButton: {
     padding: 8,
     borderRadius: 20,
+  },
+  navigationButtonDisabled: {
+    opacity: 0.5,
   },
   calendarMonthTitle: {
     color: "white",
@@ -327,6 +431,9 @@ const styles = StyleSheet.create({
   calendarDayPast: {
     opacity: 0.3,
   },
+  calendarDayFuture: {
+    opacity: 0.3,
+  },
   calendarDayText: {
     color: "white",
     fontFamily: FontFamily.Medium,
@@ -343,6 +450,9 @@ const styles = StyleSheet.create({
     color: "#aaa",
   },
   calendarDayTextPast: {
+    color: "#666",
+  },
+  calendarDayTextFuture: {
     color: "#666",
   },
   todayIndicator: {
