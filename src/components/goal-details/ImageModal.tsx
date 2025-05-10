@@ -312,11 +312,6 @@ const ImageModal: React.FC<ImageModalProps> = ({
   const handleSelectPost = (post: Log, index: number) => {
     if (selectedPost?.id === post.id || isAnimating) return;
 
-    // Only trigger haptic feedback if not on web
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-
     // Update the index
     setCurrentPostIndex(index);
 
@@ -475,11 +470,6 @@ const ImageModal: React.FC<ImageModalProps> = ({
   const shareImage = async () => {
     if (selectedPost) {
       try {
-        // Trigger haptic feedback
-        if (Platform.OS !== "web") {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        }
-
         await Share.share({
           url: selectedPost.imageUrl,
           message: `Check out my progress on day ${selectedPost.goalDay}: ${selectedPost.caption}`,

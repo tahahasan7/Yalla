@@ -67,13 +67,19 @@ const EndingDateSection: React.FC<EndingDateSectionProps> = ({
 
   const handleEndDateTypeChange = (type: string) => {
     setEndDateType(type);
-    setShowCalendar(false);
+
+    // Automatically show calendar when switching to specific date
+    if (type === "specificDate") {
+      setShowCalendar(true);
+    } else {
+      setShowCalendar(false);
+    }
 
     if (scrollViewRef.current) {
       // Scroll to the appropriate section based on which option was selected
       setTimeout(() => {
         scrollViewRef.current?.scrollTo({
-          y: type === "duration" ? 580 : 500, // Adjust these values based on your layout
+          y: type === "duration" ? 580 : 650, // Updated to scroll to calendar when specificDate
           animated: true,
         });
       }, 100);

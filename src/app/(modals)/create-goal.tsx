@@ -32,6 +32,7 @@ import CategoryColorSection from "../../components/create-goal/bottomSheets/Cate
 import ColorBottomSheet from "../../components/create-goal/bottomSheets/ColorBottomSheet";
 import EndingDateSection from "../../components/create-goal/EndingDateSection";
 import FrequencySection from "../../components/create-goal/FrequencySection";
+import FriendsSection from "../../components/create-goal/FriendsSection";
 
 // Interface for a goal object
 interface Goal {
@@ -47,6 +48,7 @@ interface Goal {
   durationType?: string;
   specificEndDate?: Date | null;
   createdAt: Date;
+  invitedFriends?: string[]; // New field for invited friends
 }
 
 export default function CreateGoalScreen() {
@@ -65,6 +67,7 @@ export default function CreateGoalScreen() {
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedFriends, setSelectedFriends] = useState<string[]>([]); // New state for selected friends
   const flowButtonRef = useRef(null);
   const infoIconRef = useRef(null);
   const endDateOptionsRef = useRef(null);
@@ -196,6 +199,13 @@ export default function CreateGoalScreen() {
     }
   };
 
+  // Reset selected friends when switching to solo mode
+  useEffect(() => {
+    if (isSolo) {
+      setSelectedFriends([]);
+    }
+  }, [isSolo]);
+
   // Handle duration input focus
   const handleDurationInputFocus = () => {
     if (scrollViewRef.current) {
@@ -218,7 +228,9 @@ export default function CreateGoalScreen() {
     (!setEndDate ||
       (endDateType === "duration"
         ? durationValue.trim() !== ""
-        : specificEndDate !== null));
+        : specificEndDate !== null)) &&
+    // Add validation for group goals requiring at least one friend
+    (isSolo || selectedFriends.length > 0);
 
   // Add console log to help debug validation
   useEffect(() => {
@@ -231,6 +243,7 @@ export default function CreateGoalScreen() {
         (endDateType === "duration"
           ? durationValue.trim() !== ""
           : specificEndDate !== null),
+      friendsCondition: isSolo || selectedFriends.length > 0,
       isFormValid,
     });
   }, [
@@ -241,6 +254,8 @@ export default function CreateGoalScreen() {
     endDateType,
     durationValue,
     specificEndDate,
+    isSolo,
+    selectedFriends,
     isFormValid,
   ]);
 
@@ -263,6 +278,7 @@ export default function CreateGoalScreen() {
       setShowFlowInfo(false);
       setShowColorPicker(false);
       setShowCategoryPicker(false);
+      setSelectedFriends([]);
 
       console.log("Reset complete");
     }, 0);
@@ -292,6 +308,11 @@ export default function CreateGoalScreen() {
       }
     }
 
+    // Add invited friends for group goals
+    if (!isSolo && selectedFriends.length > 0) {
+      goal.invitedFriends = selectedFriends;
+    }
+
     return goal;
   };
 
@@ -314,7 +335,13 @@ export default function CreateGoalScreen() {
       // Show success message
       Alert.alert(
         "Goal Created",
-        `Your '${goal.title}' goal has been created successfully!`,
+        `Your '${goal.title}' ${goal.type} goal has been created successfully!${
+          goal.type === "group" && goal.invitedFriends
+            ? ` Invitations sent to ${goal.invitedFriends.length} friend${
+                goal.invitedFriends.length !== 1 ? "s" : ""
+              }.`
+            : ""
+        }`,
         [
           {
             text: "OK",
@@ -462,6 +489,14 @@ export default function CreateGoalScreen() {
             getCategoryIcon={getCategoryIcon}
             setColor={setColor}
           />
+
+          {/* Friends Section - Only shown for group goals */}
+          {!isSolo && (
+            <FriendsSection
+              selectedFriends={selectedFriends}
+              setSelectedFriends={setSelectedFriends}
+            />
+          )}
 
           {/* Frequency Section Component */}
           <FrequencySection frequency={frequency} setFrequency={setFrequency} />
