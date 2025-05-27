@@ -1,5 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import {
   CameraType,
   CameraView,
@@ -7,15 +7,18 @@ import {
   useCameraPermissions,
 } from "expo-camera";
 import * as Haptics from "expo-haptics";
+import * as ImagePicker from "expo-image-picker";
 import * as MediaLibrary from "expo-media-library";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Animated,
+  BackHandler,
   Dimensions,
   Easing,
   FlatList,
+  Image,
   Platform,
   StatusBar,
   StyleSheet,
@@ -90,17 +93,23 @@ export default function GoalCameraScreen() {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
   const [processing, setProcessing] = useState(false);
-  const [showMusicSelector, setShowMusicSelector] = useState(false);
-  const [selectedMusic, setSelectedMusic] = useState<string | null>(null);
   const [showGoalSelector, setShowGoalSelector] = useState(false);
   const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
   const cameraRef = useRef<any>(null);
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const router = useRouter();
   const params = useLocalSearchParams();
   const goalSelectorAnim = useRef(new Animated.Value(0)).current;
-  const goalSelectorHeight = useRef(new Animated.Value(0)).current;
+  const [isNavigating, setIsNavigating] = useState(false);
+  const [cameraReady, setCameraReady] = useState(true);
+
+  // Add isMounted ref to prevent state updates after unmounting
+  const isMounted = useRef(true);
+
+  // Add timeoutRef to track and clear timeouts
+  const timeoutRef = useRef<number | null>(null);
 
   // Get the category icon for the currently selected goal
   const getSelectedGoalIcon = () => {
@@ -127,7 +136,6 @@ export default function GoalCameraScreen() {
 
   // Animation values
   const fadeAnim = useRef(new Animated.Value(1)).current;
-  const musicDropdownAnim = useRef(new Animated.Value(0)).current;
   const captureAnimation = useRef(new Animated.Value(1)).current;
   const torchIconAnim = useRef(new Animated.Value(1)).current;
   const flashIconAnim = useRef(new Animated.Value(1)).current;
@@ -135,24 +143,89 @@ export default function GoalCameraScreen() {
 
   // Add state for freeze frame effect
   const [saveToast, setSaveToast] = useState(false);
-  const [goalSelectionToast, setGoalSelectionToast] = useState(false);
   const [freezeFrame, setFreezeFrame] = useState(false);
   const freezeFrameScale = useRef(new Animated.Value(1)).current;
 
-  // Auto-select goal if navigated from goal details
+  // Add effect to handle reset parameter from post-sharing
   useEffect(() => {
-    if (params.goalId) {
-      const goalId = String(params.goalId);
-      const goalToSelect = GOALS.find((g) => g.id === goalId);
+    // Check if we have a reset parameter from post-sharing screen
+    if (params.resetCamera === "true") {
+      // Reset to capture mode
+      setShowPreview(false);
+      setCapturedImage(null);
+      setCaption("");
 
-      if (goalToSelect) {
-        setSelectedGoal(goalToSelect);
-        // Show toast message
-        setGoalSelectionToast(true);
-        setTimeout(() => setGoalSelectionToast(false), 2000);
-      }
+      // Reset camera readiness
+      setCameraReady(false);
+      setTimeout(() => {
+        if (isMounted.current) {
+          setCameraReady(true);
+        }
+      }, 50);
     }
-  }, [params.goalId]);
+  }, [params.resetCamera]);
+
+  // Handle focus/blur to properly manage camera resources
+  useFocusEffect(
+    React.useCallback(() => {
+      // Reset navigation state on focus
+      setIsNavigating(false);
+
+      // Setup hardware back button handler (Android)
+      const backHandler = BackHandler.addEventListener(
+        "hardwareBackPress",
+        () => {
+          if (showPreview) {
+            closePreview();
+            return true; // Prevent default back behavior
+          }
+          return false;
+        }
+      );
+
+      // Cleanup function
+      return () => {
+        // Set navigating to prevent further interactions
+        setIsNavigating(true);
+
+        // Remove back handler
+        backHandler.remove();
+
+        // Clear any pending timeouts
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current);
+          timeoutRef.current = null;
+        }
+
+        // Turn off torch if it's on
+        if (torchOn) {
+          setTorchOn(false);
+        }
+
+        // Stop animations
+        fadeAnim.stopAnimation();
+        captureAnimation.stopAnimation();
+        freezeFrameScale.stopAnimation();
+      };
+    }, [showPreview])
+  );
+
+  // Add proper permission requests for both camera and media library
+  useEffect(() => {
+    const requestPermissions = async () => {
+      // Request camera permissions
+      if (!cameraPermission?.granted) {
+        await requestCameraPermission();
+      }
+
+      // Request media library permissions
+      if (!galleryPermission?.granted) {
+        await requestGalleryPermission();
+      }
+    };
+
+    requestPermissions();
+  }, []);
 
   // Toggle flash mode
   const toggleFlash = () => {
@@ -222,31 +295,85 @@ export default function GoalCameraScreen() {
     }
   };
 
-  // Pick image from gallery
+  // Pick an image from the gallery
   const pickImage = async () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    // Prevent if already navigating
+    if (isNavigating) return;
 
-    // Check if we have permission to access the media library
-    if (!galleryPermission?.granted) {
-      const permission = await requestGalleryPermission();
-      if (!permission.granted) {
-        return;
-      }
+    // Prevent picking image if no goal is selected
+    if (!selectedGoal) {
+      // Show the goal selector if no goal is selected without haptic feedback
+      toggleGoalSelector();
+      return;
     }
 
-    // Logic for picking image from gallery would go here
-    // This is a placeholder for implementation
-    console.log("Open gallery to pick image");
+    // Add haptic feedback
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    try {
+      // Set navigating state to prevent concurrent operations
+      setIsNavigating(true);
+
+      // Check for media library permissions
+      if (!galleryPermission?.granted) {
+        const permission = await requestGalleryPermission();
+        if (!permission.granted) {
+          if (isMounted.current) {
+            setIsNavigating(false);
+          }
+          return;
+        }
+      }
+
+      // Launch image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 1,
+        allowsMultipleSelection: false,
+      });
+
+      // Only update state if component is still mounted
+      if (!isMounted.current) return;
+
+      // If not cancelled and image selected
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        // Show loading state
+        setProcessing(true);
+
+        // Get the selected image
+        const selectedImage = result.assets[0];
+
+        // Set the captured image
+        setCapturedImage(selectedImage.uri);
+
+        // Small delay before showing preview to ensure image is loaded
+        setTimeout(() => {
+          if (isMounted.current) {
+            setShowPreview(true);
+            setProcessing(false);
+            setIsNavigating(false);
+          }
+        }, 100);
+      } else {
+        // User cancelled, reset navigating state
+        setIsNavigating(false);
+      }
+    } catch (error) {
+      console.error("Error picking image:", error);
+      if (isMounted.current) {
+        setIsNavigating(false);
+      }
+    }
   };
 
   // Take a photo
   const takePhoto = async () => {
-    if (!cameraRef.current || processing) return;
+    if (!cameraRef.current || processing || isNavigating) return;
 
     // Prevent taking photo if no goal is selected
     if (!selectedGoal) {
-      // Show the goal selector if no goal is selected
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      // Show the goal selector if no goal is selected without haptic feedback
       toggleGoalSelector();
       return;
     }
@@ -255,6 +382,9 @@ export default function GoalCameraScreen() {
 
     try {
       setProcessing(true);
+
+      // Set navigating state to prevent concurrent operations
+      setIsNavigating(true);
 
       // Animate capture button
       Animated.sequence([
@@ -276,23 +406,165 @@ export default function GoalCameraScreen() {
         toValue: 1.03,
         duration: 200,
         useNativeDriver: true,
-      }).start(() => {
-        setTimeout(() => {
-          setFreezeFrame(false);
-          freezeFrameScale.setValue(1);
-        }, 300);
-      });
+      }).start();
 
-      // Logic for taking photo would go here
-      // This is a placeholder for implementation
-      console.log("Taking photo");
+      // Take the photo immediately to prevent delays
+      if (cameraRef.current) {
+        try {
+          const photo = await cameraRef.current.takePictureAsync({
+            quality: 0.85,
+            skipProcessing: true, // For faster capture
+          });
 
-      setTimeout(() => {
-        setProcessing(false);
-      }, 500);
+          // Only update state if still mounted
+          if (isMounted.current) {
+            // Unfreeze the frame
+            setFreezeFrame(false);
+
+            // Set the captured image first
+            setCapturedImage(photo.uri);
+
+            // Short delay before showing preview to ensure image is loaded
+            setTimeout(() => {
+              if (isMounted.current) {
+                setShowPreview(true);
+                setProcessing(false);
+                setIsNavigating(false);
+              }
+            }, 100);
+          }
+        } catch (error) {
+          console.error("Error taking photo:", error);
+          if (isMounted.current) {
+            setFreezeFrame(false);
+            setProcessing(false);
+            setIsNavigating(false);
+          }
+        }
+      }
     } catch (error) {
       console.error("Error taking photo:", error);
-      setProcessing(false);
+      if (isMounted.current) {
+        setFreezeFrame(false);
+        setProcessing(false);
+        setIsNavigating(false);
+      }
+    }
+  };
+
+  // Close the preview and return to camera - with robust crash protection
+  const closePreview = () => {
+    // Prevent multiple clicks or actions while already navigating
+    if (isNavigating) return;
+
+    // Mark as navigating to prevent further interactions
+    setIsNavigating(true);
+
+    // Simplify the process to reduce chances of error
+    // First clear the state directly
+    setShowPreview(false);
+    setCapturedImage(null);
+    setCaption("");
+
+    // Reset camera readiness to ensure it's properly reloaded
+    setCameraReady(false);
+    setTimeout(() => {
+      if (isMounted.current) {
+        setCameraReady(true);
+      }
+    }, 50);
+
+    // Reset navigating state after a short delay
+    setTimeout(() => {
+      if (isMounted.current) {
+        setIsNavigating(false);
+      }
+    }, 100);
+  };
+
+  // Save the image to the device
+  const saveImage = async () => {
+    if (!capturedImage || isNavigating) return;
+
+    try {
+      // Set navigating state to prevent concurrent operations
+      setIsNavigating(true);
+
+      // Check gallery permissions
+      if (!galleryPermission?.granted) {
+        const permission = await requestGalleryPermission();
+        if (!permission.granted) {
+          setIsNavigating(false);
+          return;
+        }
+      }
+
+      // Save to media library
+      await MediaLibrary.saveToLibraryAsync(capturedImage);
+
+      // Only update state if component is still mounted
+      if (isMounted.current) {
+        // Show success toast
+        setSaveToast(true);
+        setTimeout(() => {
+          if (isMounted.current) {
+            setSaveToast(false);
+            setIsNavigating(false);
+          }
+        }, 2000);
+      }
+    } catch (error) {
+      console.error("Error saving image:", error);
+      if (isMounted.current) {
+        setIsNavigating(false);
+      }
+    }
+  };
+
+  // Post the image (implementation would connect to your backend)
+  const postImage = async () => {
+    if (!capturedImage || !selectedGoal || isNavigating) return;
+
+    try {
+      // Set navigating state to prevent concurrent operations
+      setIsNavigating(true);
+
+      // This would be your API call to post the image
+      console.log("Posting image", {
+        imageUri: capturedImage,
+        goalId: selectedGoal.id,
+        goalTitle: selectedGoal.title,
+      });
+
+      // After successful post, close preview and reset
+      closePreview();
+
+      // Optional: navigate to another screen or show success message
+    } catch (error) {
+      console.error("Error posting image:", error);
+      if (isMounted.current) {
+        setIsNavigating(false);
+      }
+    }
+  };
+
+  // Handle Next button action
+  const handleNext = () => {
+    // Prevent if navigating
+    if (isNavigating) return;
+
+    // Navigate to post sharing screen
+    if (capturedImage && selectedGoal) {
+      router.push({
+        pathname: "/post-sharing",
+        params: {
+          imageUri: capturedImage,
+          goalId: selectedGoal.id,
+          goalTitle: selectedGoal.title,
+          goalColor: selectedGoal.color,
+          goalIcon: selectedGoal.icon || selectedCategoryIcon?.icon,
+        },
+      });
     }
   };
 
@@ -324,12 +596,6 @@ export default function GoalCameraScreen() {
 
   // Updated function to toggle goal selector with fixed animations
   function toggleGoalSelector() {
-    // Hide music selector if open
-    if (showMusicSelector) {
-      setShowMusicSelector(false);
-      musicDropdownAnim.setValue(0);
-    }
-
     // Toggle state first
     setShowGoalSelector(!showGoalSelector);
 
@@ -353,20 +619,11 @@ export default function GoalCameraScreen() {
     }
   }
 
-  // Function to select a goal with animation
-  function selectGoal(goal: Goal) {
+  // Handle goal selection
+  const selectGoal = (goal: Goal) => {
     setSelectedGoal(goal);
-
-    // Close selector with animation
-    Animated.timing(goalSelectorAnim, {
-      toValue: 0,
-      duration: 200,
-      useNativeDriver: true,
-      easing: Easing.out(Easing.cubic),
-    }).start(() => {
-      setShowGoalSelector(false);
-    });
-  }
+    toggleGoalSelector();
+  };
 
   // Add permission gating logic: only render camera when permission is granted
   if (!cameraPermission?.granted) {
@@ -390,6 +647,108 @@ export default function GoalCameraScreen() {
             Allow Camera Permission
           </Text>
         </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // If in preview mode, show the preview screen
+  if (showPreview && capturedImage) {
+    return (
+      <View style={styles.container}>
+        <StatusBar
+          translucent
+          backgroundColor="transparent"
+          barStyle="light-content"
+          hidden={false}
+        />
+
+        {/* Background that extends behind the navbar */}
+        <View
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: NAVBAR_HEIGHT,
+            backgroundColor: "#000",
+            zIndex: 1,
+          }}
+        />
+
+        {/* Preview View - Using Animated.View for smooth transitions */}
+        <Animated.View
+          style={{
+            position: "absolute",
+            top: insets.top,
+            left: 0,
+            right: 0,
+            bottom: NAVBAR_HEIGHT,
+            zIndex: 5,
+            borderRadius: 16,
+            overflow: "hidden",
+            margin: 4,
+            opacity: fadeAnim,
+            backgroundColor: "#000", // Add background color to prevent flicker
+          }}
+        >
+          {/* Image is rendered directly without condition */}
+          <Image
+            source={{ uri: capturedImage }}
+            style={styles.previewImage}
+            fadeDuration={0}
+          />
+
+          <View style={styles.previewOverlay}>
+            {/* Preview top bar */}
+            <View style={styles.previewTopBar}>
+              <TouchableOpacity
+                style={styles.previewCloseButton}
+                onPress={closePreview}
+                disabled={isNavigating} // Disable when navigating
+              >
+                <Ionicons name="close" size={24} color="white" />
+              </TouchableOpacity>
+
+              {/* Goal pill in top right */}
+              {selectedGoal && (
+                <View
+                  style={[
+                    styles.selectedGoalPill,
+                    { backgroundColor: selectedGoal.color },
+                  ]}
+                >
+                  <Icon
+                    name={selectedCategoryIcon?.icon || selectedGoal.icon}
+                    size={16}
+                    color="#fff"
+                  />
+                  <Text style={styles.selectedGoalPillText}>
+                    {selectedGoal.title}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Bottom action button - only Next */}
+            <View style={styles.previewActions}>
+              <TouchableOpacity
+                style={styles.nextButton}
+                onPress={handleNext}
+                disabled={isNavigating} // Disable when navigating
+              >
+                <Text style={styles.nextButtonText}>Next</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Save toast notification */}
+          {saveToast && (
+            <View style={styles.saveToast}>
+              <Ionicons name="checkmark-circle" size={20} color="white" />
+              <Text style={styles.saveToastText}>Saved to gallery</Text>
+            </View>
+          )}
+        </Animated.View>
       </View>
     );
   }
@@ -426,6 +785,9 @@ export default function GoalCameraScreen() {
           right: 0,
           bottom: NAVBAR_HEIGHT,
           zIndex: 5,
+          borderRadius: 16,
+          overflow: "hidden",
+          margin: 4,
         }}
       >
         <Animated.View
@@ -434,27 +796,26 @@ export default function GoalCameraScreen() {
             {
               flex: 1,
               opacity: fadeAnim,
-              borderTopLeftRadius: 20,
-              borderTopRightRadius: 20,
               transform: freezeFrame ? [{ scale: freezeFrameScale }] : [],
             },
           ]}
         >
-          <CameraView
-            style={styles.camera}
-            facing={facing}
-            flash={flash}
-            enableTorch={torchOn}
-            ref={cameraRef}
-          />
+          {cameraReady && (
+            <CameraView
+              style={styles.camera}
+              facing={facing}
+              flash={flash}
+              enableTorch={torchOn}
+              ref={cameraRef}
+            />
+          )}
+
           {/* Overlay controls */}
           <View style={styles.overlayContainer}>
             {/* Top controls */}
             <View style={[styles.topControls, { marginTop: 10 }]}>
               <View style={styles.topLeftControls}>
-                {/* Back button - removed */}
-
-                {/* Improved Goal Selector Button */}
+                {/* Goal Selector Button */}
                 <TouchableOpacity
                   style={[
                     styles.goalSelectorButton,
@@ -598,6 +959,7 @@ export default function GoalCameraScreen() {
               <TouchableOpacity
                 style={styles.galleryButton}
                 onPress={pickImage}
+                disabled={isNavigating || processing}
               >
                 <Ionicons name="images" size={30} color="white" />
               </TouchableOpacity>
@@ -609,7 +971,7 @@ export default function GoalCameraScreen() {
                 ]}
                 onPress={takePhoto}
                 activeOpacity={0.7}
-                disabled={processing}
+                disabled={processing || isNavigating}
               >
                 {processing ? (
                   <ActivityIndicator
@@ -621,7 +983,7 @@ export default function GoalCameraScreen() {
                     style={[
                       styles.captureInner,
                       {
-                        backgroundColor: theme.colors.primary,
+                        backgroundColor: "#fff",
                         transform: [{ scale: captureAnimation }],
                       },
                     ]}
@@ -632,6 +994,7 @@ export default function GoalCameraScreen() {
               <TouchableOpacity
                 style={styles.flipButton}
                 onPress={toggleCameraFacing}
+                disabled={isNavigating || processing}
               >
                 <Ionicons name="camera-reverse" size={30} color="white" />
               </TouchableOpacity>
@@ -639,18 +1002,6 @@ export default function GoalCameraScreen() {
           </View>
         </Animated.View>
       </View>
-
-      {/* Goal Selection Toast */}
-      {goalSelectionToast && (
-        <View style={styles.goalSelectionToast}>
-          <Ionicons name="checkmark-circle" size={20} color="white" />
-          <Text style={styles.goalSelectionToastText}>
-            {selectedGoal
-              ? `Selected goal: ${selectedGoal.title}`
-              : "Goal selected"}
-          </Text>
-        </View>
-      )}
     </View>
   );
 }
@@ -676,7 +1027,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "flex-start",
     padding: 16,
-    paddingTop: 20,
   },
   topLeftControls: {
     flex: 1,
@@ -689,7 +1039,6 @@ const styles = StyleSheet.create({
   },
   controlButton: {
     padding: 10,
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
     borderRadius: 25,
     width: 44,
     height: 44,
@@ -889,44 +1238,23 @@ const styles = StyleSheet.create({
     marginLeft: 6,
   },
 
-  // Other existing styles
-  permissionButton: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  previewContainer: {
-    flex: 1,
-    backgroundColor: "black",
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 9999,
-  },
+  // Preview screen styles
   previewImage: {
     flex: 1,
-    resizeMode: "cover",
-    borderTopLeftRadius: 0,
-    borderTopRightRadius: 0,
+    width: "100%",
+    height: "100%",
   },
   previewOverlay: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    bottom: 0,
-    top: 0,
-    padding: 0,
-    justifyContent: "space-between",
+    ...StyleSheet.absoluteFillObject,
     backgroundColor: "rgba(0,0,0,0.1)",
+    justifyContent: "space-between",
   },
   previewTopBar: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === "ios" ? 50 : 30,
+    paddingTop: 16,
   },
   previewCloseButton: {
     backgroundColor: "rgba(0, 0, 0, 0.4)",
@@ -936,193 +1264,63 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
   },
-  musicSelectorArea: {
-    alignItems: "center",
-    paddingTop: Platform.OS === "ios" ? 50 : 40,
-    paddingBottom: 10,
-  },
-  musicButton: {
+  selectedGoalPill: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    borderRadius: 20,
+    borderRadius: 100,
+    paddingVertical: 8,
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    marginBottom: 4,
+    height: 44,
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
   },
-  musicButtonText: {
+  selectedGoalPillText: {
     color: "white",
     fontSize: 14,
-    fontWeight: "500",
-    marginHorizontal: 8,
-  },
-  musicDropdown: {
-    backgroundColor: "rgba(0, 0, 0, 0.90)",
-    borderRadius: 16,
-    padding: 16,
-    width: "90%",
-    maxWidth: 400,
-    maxHeight: 400,
-  },
-  musicDropdownTitle: {
-    color: "white",
-    fontSize: 18,
     fontWeight: "600",
-    marginBottom: 12,
-    textAlign: "center",
+    marginLeft: 8,
   },
-  musicSearchContainer: {
+  selectGoalButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    marginBottom: 12,
-  },
-  musicSearchInput: {
-    color: "white",
-    fontSize: 14,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    flex: 1,
-  },
-  musicCategoryTabs: {
-    flexDirection: "row",
-    marginBottom: 12,
-  },
-  musicCategoryTab: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: "center",
-  },
-  musicCategoryTabActive: {
-    borderBottomWidth: 2,
-    borderBottomColor: "#0E96FF",
-  },
-  musicCategoryTabText: {
-    color: "white",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  musicOptionsList: {
-    maxHeight: 250,
-  },
-  musicOption: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-  },
-  musicOptionIconWrapper: {
-    width: 36,
-    height: 36,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  selectedMusicOption: {
-    backgroundColor: "rgba(14, 150, 255, 0.15)",
-  },
-  musicTextContainer: {
-    flex: 1,
-    marginLeft: 10,
-  },
-  musicTitle: {
-    color: "white",
-    fontSize: 15,
-    fontWeight: "500",
-  },
-  musicArtist: {
-    color: "rgba(255, 255, 255, 0.7)",
-    fontSize: 12,
-  },
-  musicDuration: {
-    color: "rgba(255, 255, 255, 0.5)",
-    fontSize: 12,
-    marginRight: 8,
-  },
-  selectedMusicBar: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    borderRadius: 30,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginHorizontal: 20,
-    marginBottom: 20,
-  },
-  selectedMusicInfo: {
-    flex: 1,
-    marginLeft: 10,
-  },
-  selectedMusicTitle: {
-    color: "white",
-    fontSize: 14,
-    fontWeight: "500",
-  },
-  selectedMusicArtist: {
-    color: "rgba(255, 255, 255, 0.7)",
-    fontSize: 12,
-  },
-  selectedMusicRemove: {
-    padding: 4,
-  },
-  captionContainer: {
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
     borderRadius: 20,
-    padding: 12,
-    marginHorizontal: 20,
-    marginBottom: 100,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
   },
-  captionInput: {
+  selectGoalButtonText: {
     color: "white",
-    fontSize: 16,
-    minHeight: 40,
+    fontSize: 14,
+    fontWeight: "500",
+    marginLeft: 8,
   },
   previewActions: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
     paddingHorizontal: 20,
     paddingBottom: Platform.OS === "ios" ? 34 : 20,
-    paddingTop: 10,
-    backgroundColor: "rgba(0,0,0,1)",
+
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
     zIndex: 1000,
   },
-  previewButton: {
-    padding: 8,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    borderRadius: 15,
-    width: 70,
-    height: 60,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  previewButtonText: {
-    color: "white",
-    fontSize: 11,
-    marginTop: 4,
-  },
-  previewPostButton: {
-    backgroundColor: "#0E96FF",
-    borderRadius: 20,
+  nextButton: {
+    backgroundColor: "#fff",
+    borderRadius: 100,
     paddingVertical: 12,
     paddingHorizontal: 24,
     justifyContent: "center",
     alignItems: "center",
-    elevation: 3,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
+
     height: 45,
+    alignSelf: "flex-end",
+    width: "30%",
   },
-  previewPostButtonText: {
-    color: "white",
+  nextButtonDisabled: {
+    backgroundColor: "rgba(14, 150, 255, 0.5)",
+    opacity: 0.7,
+  },
+  nextButtonText: {
+    color: "black",
     fontSize: 16,
     fontWeight: "600",
   },
@@ -1150,31 +1348,12 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     letterSpacing: 0.2,
   },
-  goalSelectionToast: {
-    position: "absolute",
-    top: Platform.OS === "ios" ? 100 : 80,
-    alignSelf: "center",
-    backgroundColor: "rgba(255, 102, 0, 0.95)",
-    borderRadius: 20,
-    paddingVertical: 10,
-    paddingHorizontal: 18,
-    flexDirection: "row",
-    alignItems: "center",
-    zIndex: 9999,
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
-  },
-  goalSelectionToastText: {
-    color: "white",
-    fontSize: 15,
-    fontWeight: "600",
-    marginLeft: 8,
-    letterSpacing: 0.2,
-  },
   permissionContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  permissionButton: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",

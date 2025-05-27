@@ -4,27 +4,22 @@
     "slug": "yalla",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./src/assets/images/icon.png",
+    "icon": "./assets/images/Yalla.png",
     "scheme": "myapp",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "fonts": {
-      "Outfit-Black": "./src/assets/fonts/Outfit-Black.ttf",
-      "Outfit-Bold": "./src/assets/fonts/Outfit-Bold.ttf",
-      "Outfit-Light": "./src/assets/fonts/Outfit-Light.ttf",
-      "Outfit-Medium": "./src/assets/fonts/Outfit-Medium.ttf",
-      "Outfit-Regular": "./src/assets/fonts/Outfit-Regular.ttf",
-      "Outfit-SemiBold": "./src/assets/fonts/Outfit-SemiBold.ttf"
+    "splash": {
+      "image": "./assets/images/Yalla.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
     },
     "ios": {
       "supportsTablet": true,
-      "homeIndicatorAutoHidden": false,
-      "homeIndicatorBackgroundColor": "#ffffff",
       "bundleIdentifier": "com.tahahasan7.yalla"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./src/assets/images/adaptive-icon.png",
+        "foregroundImage": "./assets/images/Yalla.png",
         "backgroundColor": "#ffffff"
       },
       "permissions": [
@@ -36,19 +31,10 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./src/assets/images/favicon.png"
+      "favicon": "./assets/images/Yalla.png"
     },
     "plugins": [
       "expo-router",
-      [
-        "expo-splash-screen",
-        {
-          "image": "./src/assets/images/splash-icon.png",
-          "imageWidth": 200,
-          "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
-        }
-      ],
       [
         "expo-camera",
         {
@@ -57,11 +43,28 @@
           "recordAudioAndroid": true
         }
       ],
-      "expo-font",
+      [
+        "expo-font",
+        {
+          "fonts": [
+            "./assets/fonts/Outfit-Black.ttf",
+            "./assets/fonts/Outfit-Bold.ttf",
+            "./assets/fonts/Outfit-Light.ttf",
+            "./assets/fonts/Outfit-Medium.ttf",
+            "./assets/fonts/Outfit-Regular.ttf",
+            "./assets/fonts/Outfit-SemiBold.ttf"
+          ]
+        }
+      ],
       "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "eas": {
+        "projectId": "acf0afe7-de28-42e2-a5d6-f3e4c5fac9c4"
+      }
     }
   }
 }

@@ -490,7 +490,7 @@ export const GOALS: Goal[] = [
         goalDay: 1,
         week: "Week 1",
         imageUrl:
-          "https://images.unsplash.com/photo-1518407613690-d9fc990e795f?q=80&w=1470&auto=format&fit=crop",
+          "https://i.pinimg.com/736x/68/84/4f/68844f2bb64e9ecaf242234bb9970978.jpg",
         caption: "First team practice session. Everyone showed up!",
         postedBy: {
           id: "p1",
@@ -622,7 +622,7 @@ export const GOALS: Goal[] = [
         goalDay: 8,
         week: "Week 2",
         imageUrl:
-          "https://images.unsplash.com/photo-1546519638-68e109498ffc?q=80&w=1470&auto=format&fit=crop",
+          "https://i.pinimg.com/736x/31/33/a1/3133a1e149c931f20f881388869ddcf1.jpg",
         caption: "Improving our coordination and teamwork.",
         postedBy: {
           id: "p2",
@@ -638,7 +638,7 @@ export const GOALS: Goal[] = [
         goalDay: 16,
         week: "Week 3",
         imageUrl:
-          "https://images.unsplash.com/photo-1519861531473-9200262188bf?q=80&w=1471&auto=format&fit=crop",
+          "https://i.pinimg.com/1200x/23/92/75/239275ea6eaec6d8eab133aac00e5a34.jpg",
         caption: "Our team is really getting into a rhythm!",
         postedBy: {
           id: "p3",
@@ -654,7 +654,7 @@ export const GOALS: Goal[] = [
         goalDay: 16,
         week: "Week 3",
         imageUrl:
-          "https://images.unsplash.com/photo-1579339738490-18b1803f1c1c?q=80&w=1470&auto=format&fit=crop",
+          "https://i.pinimg.com/736x/72/1c/5a/721c5a74af48c8b5e2d24eb5a86d245f.jpg",
         caption: "Look at us go! The whole team is making progress!",
         postedBy: {
           id: "p4",

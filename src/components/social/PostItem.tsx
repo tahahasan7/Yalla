@@ -15,8 +15,6 @@ import {
 import { FontFamily } from "../../constants/fonts";
 import { Post } from "../../types/social";
 import { Icon } from "../common";
-import HeartParticles from "./animations/HeartParticles";
-import SurpriseParticles from "./animations/SurpriseParticles";
 import FlowStateIcon from "./FlowStateIcon";
 import MusicPlayerBottomSheet from "./MusicPlayerBottomSheet";
 
@@ -383,7 +381,7 @@ const PostItem = ({
               </View>
 
               {/* Enhanced Like Button with animations */}
-              <TouchableOpacity
+              {/* <TouchableOpacity
                 style={[styles.likeButton, isLiked && styles.likeButtonActive]}
                 onPress={() => handleLike(item.id)}
                 activeOpacity={0.7}
@@ -405,10 +403,10 @@ const PostItem = ({
                   />
                 </Animated.View>
                 <HeartParticles visible={showHeartParticles} />
-              </TouchableOpacity>
+              </TouchableOpacity> */}
 
               {/* Enhanced Surprise Button with Surprise Particles */}
-              <TouchableOpacity
+              {/* <TouchableOpacity
                 style={[
                   styles.shareButton,
                   isSurprised && styles.surpriseButtonActive,
@@ -433,7 +431,7 @@ const PostItem = ({
                   />
                 </Animated.View>
                 <SurpriseParticles visible={showSurpriseParticles} />
-              </TouchableOpacity>
+              </TouchableOpacity> */}
             </View>
           </Animated.View>
         </View>

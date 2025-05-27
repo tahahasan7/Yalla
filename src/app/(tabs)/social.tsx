@@ -740,7 +740,14 @@ export default function SocialScreen() {
         <YallaLogo width={93} fill={theme.colors.text} />
 
         {/* Right - Add User Button */}
-        <TouchableOpacity style={styles.addUserButton} hitSlop={10}>
+        <TouchableOpacity
+          style={styles.addUserButton}
+          hitSlop={10}
+          onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.push("/add-user");
+          }}
+        >
           <Icon name="AddUser" size={36} color={theme.colors.text} />
         </TouchableOpacity>
       </View>

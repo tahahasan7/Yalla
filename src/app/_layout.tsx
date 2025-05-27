@@ -120,6 +120,66 @@ export default function RootLayout() {
             gestureDirection: "horizontal",
           }}
         />
+
+        {/* Post sharing screen */}
+        <Stack.Screen
+          name="post-sharing"
+          options={{
+            headerShown: false,
+            presentation: "card",
+            animation: "slide_from_right",
+            gestureEnabled: false,
+            gestureDirection: "horizontal",
+          }}
+        />
+
+        {/* Settings screen - horizontal slide in */}
+        <Stack.Screen
+          name="settings"
+          options={{
+            headerShown: false,
+            presentation: "card",
+            animation: "slide_from_right",
+            gestureEnabled: true,
+            gestureDirection: "horizontal",
+          }}
+        />
+
+        {/* Non-modal Profile Page - horizontal slide in */}
+        <Stack.Screen
+          name="profile-page"
+          options={{
+            headerShown: false,
+            presentation: "card",
+            animation: "slide_from_right",
+            gestureEnabled: true,
+            gestureDirection: "horizontal",
+          }}
+        />
+
+        {/* About screen - horizontal slide in */}
+        <Stack.Screen
+          name="about"
+          options={{
+            headerShown: false,
+            presentation: "card",
+            animation: "slide_from_right",
+            gestureEnabled: true,
+            gestureDirection: "horizontal",
+          }}
+        />
+
+        {/* Edit Profile screen - horizontal slide in */}
+        <Stack.Screen
+          name="edit-profile"
+          options={{
+            headerShown: false,
+            presentation: "card",
+            animation: "slide_from_right",
+            gestureEnabled: true,
+            gestureDirection: "horizontal",
+          }}
+        />
       </Stack>
     </ThemeProvider>
   );

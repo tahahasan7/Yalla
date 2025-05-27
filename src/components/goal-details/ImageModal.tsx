@@ -55,8 +55,6 @@ const ImageModal: React.FC<ImageModalProps> = ({
   const [currentPostIndex, setCurrentPostIndex] = useState(0);
   const [slideshowActive, setSlideshowActive] = useState(true); // Autoplay by default
   const [slideshowProgress, setSlideshowProgress] = useState(0);
-  const [isLiked, setIsLiked] = useState(false);
-  const [likeCount, setLikeCount] = useState(0);
 
   // Track if modal is fully open
   const isModalOpenRef = useRef(false);
@@ -585,31 +583,6 @@ const ImageModal: React.FC<ImageModalProps> = ({
     }
   };
 
-  // Add function to handle like toggling
-  const handleLikeToggle = () => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-
-    if (isLiked) {
-      setLikeCount((prev) => Math.max(0, prev - 1));
-    } else {
-      setLikeCount((prev) => prev + 1);
-    }
-
-    setIsLiked(!isLiked);
-  };
-
-  // Initialize like state when post changes
-  useEffect(() => {
-    if (selectedPost) {
-      // Simulate random like count between 0-20 for demo
-      const randomLikes = Math.floor(Math.random() * 20);
-      setLikeCount(randomLikes);
-      setIsLiked(false);
-    }
-  }, [selectedPost?.id]);
-
   // Render a post thumbnail for multiple posts view
   const renderPostThumbnail = ({
     item,
@@ -834,22 +807,6 @@ const ImageModal: React.FC<ImageModalProps> = ({
                       style={styles.actionsOverlay}
                       pointerEvents="box-none"
                     >
-                      {/* Like button */}
-                      <TouchableOpacity
-                        style={styles.imageActionButton}
-                        onPress={handleLikeToggle}
-                        activeOpacity={0.7}
-                      >
-                        <Ionicons
-                          name={isLiked ? "heart" : "heart-outline"}
-                          size={22}
-                          color={isLiked ? "#ff375f" : "white"}
-                        />
-                        {likeCount > 0 && (
-                          <Text style={styles.likeCountText}>{likeCount}</Text>
-                        )}
-                      </TouchableOpacity>
-
                       {/* Download button */}
                       <TouchableOpacity
                         style={styles.imageActionButton}
@@ -1200,13 +1157,6 @@ const styles = StyleSheet.create({
     width: 10,
     height: 10,
     borderRadius: 5,
-  },
-  // Style for like count
-  likeCountText: {
-    color: "white",
-    fontSize: 12,
-    fontFamily: FontFamily.SemiBold,
-    marginTop: 4,
   },
 });
 

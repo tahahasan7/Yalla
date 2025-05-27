@@ -82,7 +82,7 @@ export default function GoalsScreen() {
         ]}
       >
         {/* Left - User Profile Pic */}
-        <TouchableOpacity onPress={() => router.push("/profile")}>
+        <TouchableOpacity onPress={() => router.push("/profile-page")}>
           <View
             style={{
               padding: 4,
