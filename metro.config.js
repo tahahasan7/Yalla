@@ -15,6 +15,8 @@ module.exports = (() => {
     ...resolver,
     assetExts: resolver.assetExts.filter((ext) => ext !== "svg"),
     sourceExts: [...resolver.sourceExts, "svg"],
+    // Disable package exports to fix Supabase compatibility issue
+    unstable_enablePackageExports: false,
   };
 
   return config;

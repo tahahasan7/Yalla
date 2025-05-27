@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
 import {
+  Alert,
   SafeAreaView,
   ScrollView,
   StyleSheet,
@@ -14,6 +15,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FontFamily } from "../../constants/fonts";
 import { DarkTheme, DefaultTheme } from "../../constants/theme";
 import { useColorScheme } from "../../hooks/useColorScheme";
+import { supabase } from "../../lib/supabase";
 
 type SettingsItemProps = {
   icon: string;
@@ -106,6 +108,20 @@ export default function Settings() {
   const router = useRouter();
   const [notificationsEnabled, setNotificationsEnabled] = React.useState(true);
 
+  const handleLogout = async () => {
+    try {
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        Alert.alert("Error", error.message);
+        return;
+      }
+      router.replace("/welcome");
+    } catch (error) {
+      console.error("Logout error:", error);
+      Alert.alert("Error", "Failed to log out. Please try again.");
+    }
+  };
+
   const settingsSections: SettingsSection[] = [
     {
       title: "Account",
@@ -148,7 +164,7 @@ export default function Settings() {
         {
           icon: "log-out-outline",
           title: "Log Out",
-          onPress: () => {},
+          onPress: handleLogout,
           showChevron: false,
         },
       ],

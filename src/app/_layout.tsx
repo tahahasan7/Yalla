@@ -54,6 +54,36 @@ export default function RootLayout() {
           gestureDirection: "horizontal",
         }}
       >
+        {/* Authentication screens */}
+        <Stack.Screen
+          name="welcome"
+          options={{
+            headerShown: false,
+            animation: "fade",
+            gestureEnabled: false,
+          }}
+        />
+
+        <Stack.Screen
+          name="login"
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+            gestureEnabled: true,
+            gestureDirection: "horizontal",
+          }}
+        />
+
+        <Stack.Screen
+          name="register"
+          options={{
+            headerShown: false,
+            animation: "slide_from_right",
+            gestureEnabled: true,
+            gestureDirection: "horizontal",
+          }}
+        />
+
         {/* Main tab navigation */}
         <Stack.Screen
           name="(tabs)"
