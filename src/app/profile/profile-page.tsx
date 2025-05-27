@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React from "react";
 import {
   Dimensions,
   FlatList,
@@ -14,12 +14,12 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Icon } from "../components/common";
-import { FontFamily } from "../constants/fonts";
-import { POSTS } from "../constants/socialData";
-import { DarkTheme, DefaultTheme } from "../constants/theme";
-import { useColorScheme } from "../hooks/useColorScheme";
-import { Post } from "../types/social";
+import { Icon } from "../../components/common";
+import { FontFamily } from "../../constants/fonts";
+import { POSTS } from "../../constants/socialData";
+import { DarkTheme, DefaultTheme } from "../../constants/theme";
+import { useColorScheme } from "../../hooks/useColorScheme";
+import { Post } from "../../types/social";
 
 // Screen dimensions
 const { width } = Dimensions.get("window");
@@ -97,7 +97,6 @@ export default function ProfilePage() {
   const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
   const theme = colorScheme === "dark" ? DarkTheme : DefaultTheme;
-  const [activeTab, setActiveTab] = useState("grid");
   const router = useRouter();
 
   // Render post item in grid
@@ -150,7 +149,7 @@ export default function ProfilePage() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.optionsButton}
-              onPress={() => router.push("/settings")}
+              onPress={() => router.push("/profile/settings")}
             >
               <Ionicons
                 name="settings-outline"
@@ -180,7 +179,7 @@ export default function ProfilePage() {
             <View style={styles.profileActionButtons}>
               <TouchableOpacity
                 style={styles.editButton}
-                onPress={() => router.push("/edit-profile")}
+                onPress={() => router.push("/profile/edit-profile")}
               >
                 <Ionicons name="pencil-outline" size={18} color="#FFFFFF" />
                 <Text style={styles.editButtonText}>Edit</Text>
@@ -197,48 +196,13 @@ export default function ProfilePage() {
             </View>
           </View>
 
-          {/* Tab icons */}
+          {/* Tab icons - with only one tab */}
           <View style={styles.tabsContainer}>
-            <TouchableOpacity
-              style={[styles.tab, activeTab === "grid" && styles.activeTab]}
-              onPress={() => setActiveTab("grid")}
-            >
+            <TouchableOpacity style={[styles.tab, styles.activeTab]}>
               <Ionicons
                 name="grid-outline"
                 size={22}
-                color={
-                  activeTab === "grid"
-                    ? theme.colors.text
-                    : theme.colors.text + "70"
-                }
-              />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.tab, activeTab === "featured" && styles.activeTab]}
-              onPress={() => setActiveTab("featured")}
-            >
-              <Ionicons
-                name="sparkles-outline"
-                size={22}
-                color={
-                  activeTab === "featured"
-                    ? theme.colors.text
-                    : theme.colors.text + "70"
-                }
-              />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.tab, activeTab === "tagged" && styles.activeTab]}
-              onPress={() => setActiveTab("tagged")}
-            >
-              <Ionicons
-                name="people-outline"
-                size={22}
-                color={
-                  activeTab === "tagged"
-                    ? theme.colors.text
-                    : theme.colors.text + "70"
-                }
+                color={theme.colors.text}
               />
             </TouchableOpacity>
           </View>

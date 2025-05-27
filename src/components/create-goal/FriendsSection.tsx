@@ -1,14 +1,7 @@
 import { FontFamily } from "@/constants/fonts";
 import { Ionicons } from "@expo/vector-icons";
-import React, { useEffect, useRef, useState } from "react";
-import {
-  Animated,
-  Easing,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import React, { useEffect, useState } from "react";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import FriendsBottomSheet from "./bottomSheets/FriendsBottomSheet";
 
 // Sample data for friends
@@ -63,36 +56,12 @@ interface FriendsSectionProps {
   setSelectedFriends: (friendIds: string[]) => void;
 }
 
-// Friend Avatar component with rotation animation
-const FriendAvatar = ({ avatar, index }: { avatar: string; index: number }) => {
-  const spinValue = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    // Start the animation with a delay based on index
-    setTimeout(() => {
-      Animated.loop(
-        Animated.timing(spinValue, {
-          toValue: 1,
-          duration: 10000, // 10 seconds for a full rotation
-          easing: Easing.linear,
-          useNativeDriver: true,
-        })
-      ).start();
-    }, index * 500); // Stagger animation starts
-  }, []);
-
-  // Map 0-1 to 0-360 degrees
-  const spin = spinValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "360deg"],
-  });
-
+// Simple Friend Avatar component without animation
+const FriendAvatar = ({ avatar }: { avatar: string }) => {
   return (
-    <Animated.View style={{ transform: [{ rotate: spin }] }}>
-      <View style={styles.previewAvatarContainer}>
-        <Animated.Image source={{ uri: avatar }} style={styles.previewAvatar} />
-      </View>
-    </Animated.View>
+    <View style={styles.previewAvatarContainer}>
+      <Image source={{ uri: avatar }} style={styles.previewAvatar} />
+    </View>
   );
 };
 
@@ -152,13 +121,9 @@ const FriendsSection: React.FC<FriendsSectionProps> = ({
           </View>
 
           <View style={styles.previewRight}>
-            {/* Show avatars of first few friends with animation */}
-            {selectedFriendObjects.slice(0, 3).map((friend, index) => (
-              <FriendAvatar
-                key={friend.id}
-                avatar={friend.avatar}
-                index={index}
-              />
+            {/* Show avatars of first few friends without animation */}
+            {selectedFriendObjects.slice(0, 3).map((friend) => (
+              <FriendAvatar key={friend.id} avatar={friend.avatar} />
             ))}
 
             {/* Show count if there are more than 3 friends */}

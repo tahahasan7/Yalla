@@ -11,9 +11,9 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { FontFamily } from "../constants/fonts";
-import { DarkTheme, DefaultTheme } from "../constants/theme";
-import { useColorScheme } from "../hooks/useColorScheme";
+import { FontFamily } from "../../constants/fonts";
+import { DarkTheme, DefaultTheme } from "../../constants/theme";
+import { useColorScheme } from "../../hooks/useColorScheme";
 
 type SettingsItemProps = {
   icon: string;
@@ -116,7 +116,7 @@ export default function Settings() {
           subtitle: "Edit your profile information",
           onPress: () =>
             router.push({
-              pathname: "/edit-profile",
+              pathname: "/profile/edit-profile",
             }),
         },
         {
@@ -137,7 +137,7 @@ export default function Settings() {
           subtitle: "App version 1.0.0",
           onPress: () =>
             router.push({
-              pathname: "/about",
+              pathname: "/profile/about",
             }),
         },
       ],

@@ -16,9 +16,9 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { FontFamily } from "../constants/fonts";
-import { DarkTheme, DefaultTheme } from "../constants/theme";
-import { useColorScheme } from "../hooks/useColorScheme";
+import { FontFamily } from "../../constants/fonts";
+import { DarkTheme, DefaultTheme } from "../../constants/theme";
+import { useColorScheme } from "../../hooks/useColorScheme";
 
 export default function EditProfile() {
   const insets = useSafeAreaInsets();

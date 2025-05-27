@@ -719,7 +719,7 @@ export default function SocialScreen() {
         ]}
       >
         {/* Left - User Profile Pic */}
-        <TouchableOpacity onPress={() => router.push("/profile")}>
+        <TouchableOpacity onPress={() => router.push("/profile/profile-page")}>
           <View
             style={{
               padding: 4,

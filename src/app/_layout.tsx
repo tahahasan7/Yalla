@@ -135,7 +135,7 @@ export default function RootLayout() {
 
         {/* Settings screen - horizontal slide in */}
         <Stack.Screen
-          name="settings"
+          name="profile/settings"
           options={{
             headerShown: false,
             presentation: "card",
@@ -147,7 +147,7 @@ export default function RootLayout() {
 
         {/* Non-modal Profile Page - horizontal slide in */}
         <Stack.Screen
-          name="profile-page"
+          name="profile/profile-page"
           options={{
             headerShown: false,
             presentation: "card",
@@ -159,7 +159,7 @@ export default function RootLayout() {
 
         {/* About screen - horizontal slide in */}
         <Stack.Screen
-          name="about"
+          name="profile/about"
           options={{
             headerShown: false,
             presentation: "card",
@@ -171,7 +171,7 @@ export default function RootLayout() {
 
         {/* Edit Profile screen - horizontal slide in */}
         <Stack.Screen
-          name="edit-profile"
+          name="profile/edit-profile"
           options={{
             headerShown: false,
             presentation: "card",

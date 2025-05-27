@@ -1,8 +1,14 @@
 import { getColorName } from "@/constants/colors";
 import { FontFamily } from "@/constants/fonts";
 import { Ionicons } from "@expo/vector-icons";
-import React from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useRef } from "react";
+import {
+  Animated,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { Icon } from "../../common";
 
 interface CategoryColorSectionProps {
@@ -22,7 +28,77 @@ const CategoryColorSection: React.FC<CategoryColorSectionProps> = ({
   getCategoryIcon,
   setColor,
 }) => {
-  // We don't associate colors with categories anymore
+  // Animation values for rotating the empty circles
+  const categoryRotation = useRef(new Animated.Value(0)).current;
+  const colorRotation = useRef(new Animated.Value(0)).current;
+
+  // Animation refs to store animation instances
+  const categoryAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
+  const colorAnimationRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  // Animation configuration
+  useEffect(() => {
+    // Start animations when there's no selection
+    const startCategoryAnimation = () => {
+      categoryAnimationRef.current = Animated.loop(
+        Animated.timing(categoryRotation, {
+          toValue: 1,
+          duration: 3000,
+          useNativeDriver: true,
+        })
+      );
+      categoryAnimationRef.current.start();
+    };
+
+    const startColorAnimation = () => {
+      colorAnimationRef.current = Animated.loop(
+        Animated.timing(colorRotation, {
+          toValue: 1,
+          duration: 3000,
+          useNativeDriver: true,
+        })
+      );
+      colorAnimationRef.current.start();
+    };
+
+    // Start or stop animations based on selection state
+    if (!category) {
+      startCategoryAnimation();
+    } else {
+      if (categoryAnimationRef.current) {
+        categoryAnimationRef.current.stop();
+      }
+    }
+
+    if (!color) {
+      startColorAnimation();
+    } else {
+      if (colorAnimationRef.current) {
+        colorAnimationRef.current.stop();
+      }
+    }
+
+    return () => {
+      // Clean up animations on unmount
+      if (categoryAnimationRef.current) {
+        categoryAnimationRef.current.stop();
+      }
+      if (colorAnimationRef.current) {
+        colorAnimationRef.current.stop();
+      }
+    };
+  }, [category, color, categoryRotation, colorRotation]);
+
+  // Create interpolated rotation values for the animation
+  const categoryRotateInterpolate = categoryRotation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
+
+  const colorRotateInterpolate = colorRotation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ["0deg", "360deg"],
+  });
 
   return (
     <View style={styles.row}>
@@ -44,7 +120,7 @@ const CategoryColorSection: React.FC<CategoryColorSectionProps> = ({
         >
           {category ? category : "Category"}
         </Text>
-        {category && (
+        {category ? (
           <View
             style={[
               styles.categoryIconContainer,
@@ -67,6 +143,14 @@ const CategoryColorSection: React.FC<CategoryColorSectionProps> = ({
               />
             )}
           </View>
+        ) : (
+          <Animated.View
+            style={[
+              styles.categoryIconContainer,
+              styles.noCategoryColorSelected,
+              { transform: [{ rotate: categoryRotateInterpolate }] },
+            ]}
+          />
         )}
       </TouchableOpacity>
       <View style={styles.buttonConnector} />
@@ -82,15 +166,25 @@ const CategoryColorSection: React.FC<CategoryColorSectionProps> = ({
             {color ? getColorName(color) : "Select color"}
           </Text>
         </Text>
-        <View
-          style={[
-            styles.colorPreview,
-            color ? { backgroundColor: color } : styles.noColorSelected,
-            color ? styles.selectedColorPreview : null,
-          ]}
-        >
-          {color && <Ionicons name="checkmark" size={14} color="#fff" />}
-        </View>
+        {color ? (
+          <View
+            style={[
+              styles.colorPreview,
+              { backgroundColor: color },
+              styles.selectedColorPreview,
+            ]}
+          >
+            <Ionicons name="checkmark" size={14} color="#fff" />
+          </View>
+        ) : (
+          <Animated.View
+            style={[
+              styles.colorPreview,
+              styles.noColorSelected,
+              { transform: [{ rotate: colorRotateInterpolate }] },
+            ]}
+          />
+        )}
       </TouchableOpacity>
     </View>
   );
