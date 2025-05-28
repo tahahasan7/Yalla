@@ -3,11 +3,8 @@ import { createClient } from "@supabase/supabase-js";
 import { AppState, Linking, Platform } from "react-native";
 import "react-native-url-polyfill/auto";
 
-const supabaseUrl =
-  process.env.SUPABASE_URL || "https://iqtbfaexadvgmccacumt.supabase.co";
-const supabaseAnonKey =
-  process.env.SUPABASE_ANON_KEY ||
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlxdGJmYWV4YWR2Z21jY2FjdW10Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDgzMDQ5MTEsImV4cCI6MjA2Mzg4MDkxMX0.-TOGAaZuGrSWKZNxQRfdLHALEeoxJOlnmUVz9IzVkYM";
+const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL as string;
+const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY as string;
 
 // Create a custom storage adapter that works in both web and native environments
 const customStorageAdapter = {
