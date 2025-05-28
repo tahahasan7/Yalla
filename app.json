@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/Yalla.png",
-    "scheme": "myapp",
+    "scheme": "yalla",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
@@ -15,7 +15,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.tahahasan7.yalla"
+      "bundleIdentifier": "com.tahahasan7.yalla",
+      "config": {
+        "usesAppleSignIn": true
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -56,15 +59,17 @@
           ]
         }
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-apple-authentication"
     ],
     "experiments": {
       "typedRoutes": true
     },
     "extra": {
       "eas": {
-        "projectId": "acf0afe7-de28-42e2-a5d6-f3e4c5fac9c4"
+        "projectId": "bc14f4e8-e6ad-4187-bfef-6efcdded2c64"
       }
-    }
+    },
+    "owner": "tahahasan7"
   }
 }

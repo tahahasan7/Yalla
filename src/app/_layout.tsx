@@ -64,26 +64,6 @@ export default function RootLayout() {
           }}
         />
 
-        <Stack.Screen
-          name="login"
-          options={{
-            headerShown: false,
-            animation: "slide_from_right",
-            gestureEnabled: true,
-            gestureDirection: "horizontal",
-          }}
-        />
-
-        <Stack.Screen
-          name="register"
-          options={{
-            headerShown: false,
-            animation: "slide_from_right",
-            gestureEnabled: true,
-            gestureDirection: "horizontal",
-          }}
-        />
-
         {/* Main tab navigation */}
         <Stack.Screen
           name="(tabs)"
@@ -136,18 +116,6 @@ export default function RootLayout() {
               gestureEnabled: true,
               gestureDirection: "horizontal",
             } as NativeStackNavigationOptions;
-          }}
-        />
-
-        {/* Profile screen */}
-        <Stack.Screen
-          name="profile"
-          options={{
-            headerShown: false,
-            presentation: "card",
-            animation: "slide_from_right",
-            gestureEnabled: true,
-            gestureDirection: "horizontal",
           }}
         />
 
