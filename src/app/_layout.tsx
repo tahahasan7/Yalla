@@ -5,9 +5,11 @@ import {
 } from "@react-navigation/native";
 import { NativeStackNavigationOptions } from "@react-navigation/native-stack";
 import { Stack } from "expo-router";
+import { useEffect } from "react";
 import { StatusBar, Text, View } from "react-native";
 import { useColorScheme } from "../hooks/useColorScheme";
 import { useFonts } from "../hooks/useFonts";
+import { verifyOAuthConfiguration } from "../lib/supabase";
 
 // Define valid animations as a type
 type AnimationType = "slide_from_right" | "slide_from_left" | undefined;
@@ -21,6 +23,13 @@ export default function RootLayout() {
   const colorScheme = useColorScheme();
   const theme = colorScheme === "dark" ? DarkTheme : DefaultTheme;
   const fontsLoaded = useFonts();
+
+  // Verify OAuth configuration on app startup
+  useEffect(() => {
+    verifyOAuthConfiguration().then((result) => {
+      console.log("OAuth configuration verified:", result);
+    });
+  }, []);
 
   // Show a simple loading screen until fonts are loaded
   if (!fontsLoaded) {

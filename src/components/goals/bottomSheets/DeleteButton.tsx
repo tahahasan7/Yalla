@@ -3,7 +3,6 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  Alert,
   Animated,
   Easing,
   PanResponder,
@@ -181,7 +180,7 @@ const DeleteButton = ({ onDelete, itemTitle }: DeleteButtonProps) => {
         }
 
         if (gestureState.dx > SWIPE_THRESHOLD) {
-          // Swipe completed, show confirmation
+          // Swipe completed, directly execute the delete action
           setIsConfirming(true);
           setBgColor("#EB6247");
 
@@ -196,27 +195,9 @@ const DeleteButton = ({ onDelete, itemTitle }: DeleteButtonProps) => {
           // Very subtle success notification when swipe completes successfully
           Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
-          // Show confirmation dialog
+          // Direct delete without confirmation dialog since the parent component will handle it
           setTimeout(() => {
-            Alert.alert(
-              "Delete Item",
-              `Are you sure you want to delete "${itemTitle}"?`,
-              [
-                {
-                  text: "Cancel",
-                  style: "cancel",
-                  onPress: () => resetSwipe(),
-                },
-                {
-                  text: "Delete",
-                  style: "destructive",
-                  onPress: () => {
-                    resetSwipe();
-                    onDelete();
-                  },
-                },
-              ]
-            );
+            handleDelete();
           }, 300);
         } else {
           // Not swiped far enough, reset
@@ -238,6 +219,12 @@ const DeleteButton = ({ onDelete, itemTitle }: DeleteButtonProps) => {
       tension: 40,
       useNativeDriver: true,
     }).start();
+  };
+
+  // Directly call onDelete without showing an alert since parent will handle confirmation
+  const handleDelete = () => {
+    resetSwipe();
+    onDelete();
   };
 
   return (

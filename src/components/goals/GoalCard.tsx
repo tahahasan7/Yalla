@@ -4,21 +4,21 @@ import { router } from "expo-router";
 import React from "react";
 import {
   Animated,
-  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
 import { FontFamily } from "../../constants/fonts";
-import { CATEGORIES, Goal } from "../../constants/goalData";
-import { Icon } from "../common";
+import { CATEGORIES } from "../../constants/goalData";
+import { GoalWithDetails } from "../../services/goalService";
+import { Icon, ProfileAvatar } from "../common";
 import FlowStateIcon from "../social/FlowStateIcon";
 
 // Goal card component props
 interface GoalCardProps {
-  goal: Goal;
-  onLongPress: (goal: Goal) => void;
+  goal: GoalWithDetails;
+  onLongPress: (goal: GoalWithDetails) => void;
 }
 
 // Simplified Goal card component
@@ -37,13 +37,16 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onLongPress }) => {
     goal.duration.toLowerCase().includes("week") ||
     goal.duration.toLowerCase().includes("month");
 
+  // Determine flow state (this is not in database yet, so use a default)
+  const flowState = "still" as "still" | "kindling" | "glowing" | "flowing";
+
   // Get the category icon for the goal
   const getCategoryIcon = () => {
     // Find the category in CATEGORIES array
-    const category = CATEGORIES.find((cat) => cat.name === goal.category);
+    const category = CATEGORIES.find((cat) => cat.name === goal.category?.name);
 
     // If category found, return the icon info, otherwise return a default
-    return category || { name: "Default", icon: goal.icon };
+    return category || { name: "Default", icon: "Fun" };
   };
 
   const categoryIcon = getCategoryIcon();
@@ -84,14 +87,12 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onLongPress }) => {
         frequency: goal.frequency,
         duration: goal.duration,
         color: goal.color,
-        icon: goal.icon,
-        flowState: goal.flowState,
-        lastImage: goal.lastImage,
-        lastImageDate: goal.lastImageDate,
+        icon: categoryIcon.icon,
+        flowState: flowState,
         progress: goal.progress?.toString(),
         completed: goal.completed ? "true" : "false",
-        completedDate: goal.completedDate,
-        category: goal.category,
+        completedDate: goal.completed_date,
+        category: goal.category?.name,
       },
     });
   };
@@ -143,11 +144,18 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onLongPress }) => {
       <View style={styles.participantsContainer}>
         <View style={styles.avatarRow}>
           {visibleParticipants.map((participant, index) => (
-            <Image
+            <View
               key={participant.id}
-              source={{ uri: participant.profilePic }}
-              style={[styles.avatarImage, { marginLeft: index > 0 ? -10 : 0 }]}
-            />
+              style={[
+                styles.avatarWrapper,
+                { marginLeft: index > 0 ? -10 : 0 },
+              ]}
+            >
+              <ProfileAvatar
+                imageUri={participant.user.profile_pic_url}
+                size={24}
+              />
+            </View>
           ))}
           {hasMore && (
             <View style={[styles.moreIndicator, { marginLeft: -10 }]}>
@@ -193,7 +201,7 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onLongPress }) => {
               </View>
               <View style={styles.titleContainer}>
                 <Text style={styles.goalTitle}>{goal.title}</Text>
-                {goal.goalType === "group" && (
+                {goal.goal_type === "group" && (
                   <View style={styles.groupIndicator}>
                     <Ionicons
                       name="people"
@@ -207,7 +215,7 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onLongPress }) => {
             </View>
 
             {/* Right: Flow state */}
-            <FlowStateIcon flowState={goal.flowState} size={24} />
+            <FlowStateIcon flowState={flowState} size={24} />
           </View>
 
           {/* Middle section: Progress or completion info */}
@@ -241,7 +249,7 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onLongPress }) => {
           )}
 
           {/* Bottom section: Participants (only for group goals) */}
-          {goal.goalType === "group" && renderParticipants()}
+          {goal.goal_type === "group" && renderParticipants()}
         </View>
       </TouchableOpacity>
     </Animated.View>
@@ -375,7 +383,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
-  avatarImage: {
+  avatarWrapper: {
     width: 24,
     height: 24,
     borderRadius: 12,

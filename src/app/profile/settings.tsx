@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React from "react";
 import {
+  ActivityIndicator,
   Alert,
   SafeAreaView,
   ScrollView,
@@ -14,6 +15,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FontFamily } from "../../constants/fonts";
 import { DarkTheme, DefaultTheme } from "../../constants/theme";
+import { useAuth } from "../../hooks/useAuth";
 import { useColorScheme } from "../../hooks/useColorScheme";
 import { supabase } from "../../lib/supabase";
 
@@ -106,20 +108,39 @@ export default function Settings() {
   const colorScheme = useColorScheme();
   const theme = colorScheme === "dark" ? DarkTheme : DefaultTheme;
   const router = useRouter();
+  const { user, loading } = useAuth();
   const [notificationsEnabled, setNotificationsEnabled] = React.useState(true);
+  const [isLoggingOut, setIsLoggingOut] = React.useState(false);
 
   const handleLogout = async () => {
     try {
+      setIsLoggingOut(true);
       const { error } = await supabase.auth.signOut();
       if (error) {
         Alert.alert("Error", error.message);
         return;
       }
-      router.replace("/welcome");
+      router.replace("/");
     } catch (error) {
       console.error("Logout error:", error);
       Alert.alert("Error", "Failed to log out. Please try again.");
+    } finally {
+      setIsLoggingOut(false);
     }
+  };
+
+  const confirmLogout = () => {
+    Alert.alert("Confirm Logout", "Are you sure you want to log out?", [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Log Out",
+        style: "destructive",
+        onPress: handleLogout,
+      },
+    ]);
   };
 
   const settingsSections: SettingsSection[] = [
@@ -129,7 +150,9 @@ export default function Settings() {
         {
           icon: "person-outline",
           title: "Profile",
-          subtitle: "Edit your profile information",
+          subtitle: user?.name
+            ? `Edit profile for ${user.name}`
+            : "Edit your profile information",
           onPress: () =>
             router.push({
               pathname: "/profile/edit-profile",
@@ -163,13 +186,52 @@ export default function Settings() {
       items: [
         {
           icon: "log-out-outline",
-          title: "Log Out",
-          onPress: handleLogout,
+          title: isLoggingOut ? "Logging out..." : "Log Out",
+          onPress: confirmLogout,
           showChevron: false,
         },
       ],
     },
   ];
+
+  // Show loading state while user data is being fetched
+  if (loading) {
+    return (
+      <View
+        style={[
+          styles.loadingContainer,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
+        <ActivityIndicator size="large" color="#0E96FF" />
+        <Text style={[styles.loadingText, { color: theme.colors.text }]}>
+          Loading settings...
+        </Text>
+      </View>
+    );
+  }
+
+  // Redirect to home if no user
+  if (!user) {
+    return (
+      <View
+        style={[
+          styles.loadingContainer,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
+        <Text style={[styles.loadingText, { color: theme.colors.text }]}>
+          Please log in to access settings
+        </Text>
+        <TouchableOpacity
+          style={styles.loginButton}
+          onPress={() => router.push("/")}
+        >
+          <Text style={styles.loginButtonText}>Log In</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   return (
     <View
@@ -307,5 +369,29 @@ const styles = StyleSheet.create({
   settingsItemSubtitle: {
     fontSize: 14,
     fontFamily: FontFamily.Regular,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: FontFamily.Medium,
+    marginTop: 16,
+    textAlign: "center",
+  },
+  loginButton: {
+    marginTop: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    backgroundColor: "#0E96FF",
+    borderRadius: 14,
+  },
+  loginButtonText: {
+    fontSize: 16,
+    fontFamily: FontFamily.SemiBold,
+    color: "white",
   },
 });

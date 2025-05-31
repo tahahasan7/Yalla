@@ -1,5 +1,7 @@
 import { FontFamily } from "@/constants/fonts";
 import { CATEGORIES } from "@/constants/goalData";
+import { useAuth } from "@/hooks/useAuth";
+import { goalService } from "@/services/goalService";
 import { Ionicons } from "@expo/vector-icons";
 import BottomSheet, {
   BottomSheetBackdrop,
@@ -54,6 +56,7 @@ interface Goal {
 export default function CreateGoalScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { user } = useAuth();
   const [isSolo, setIsSolo] = useState(true);
   const [goalName, setGoalName] = useState("");
   const [isGoalNameFocused, setIsGoalNameFocused] = useState(false);
@@ -68,6 +71,7 @@ export default function CreateGoalScreen() {
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedFriends, setSelectedFriends] = useState<string[]>([]); // New state for selected friends
+  const [categoryId, setCategoryId] = useState<string | null>(null);
   const flowButtonRef = useRef(null);
   const infoIconRef = useRef(null);
   const endDateOptionsRef = useRef(null);
@@ -132,6 +136,28 @@ export default function CreateGoalScreen() {
   const [durationValue, setDurationValue] = useState("");
   const [durationType, setDurationType] = useState("weeks");
   const [showCalendar, setShowCalendar] = useState(false);
+
+  // Find category ID when category name changes
+  useEffect(() => {
+    if (category) {
+      const fetchCategoryId = async () => {
+        try {
+          const { data, error } = await goalService.getCategoryByName(category);
+          if (error) {
+            console.error("Error fetching category ID:", error);
+          } else if (data) {
+            setCategoryId(data.id);
+          }
+        } catch (err) {
+          console.error("Unexpected error fetching category:", err);
+        }
+      };
+
+      fetchCategoryId();
+    } else {
+      setCategoryId(null);
+    }
+  }, [category]);
 
   // Add keyboard listeners
   useEffect(() => {
@@ -224,6 +250,7 @@ export default function CreateGoalScreen() {
   const isFormValid =
     goalName.trim() !== "" &&
     category !== "" &&
+    categoryId !== null &&
     color !== "" &&
     (!setEndDate ||
       (endDateType === "duration"
@@ -231,33 +258,6 @@ export default function CreateGoalScreen() {
         : specificEndDate !== null)) &&
     // Add validation for group goals requiring at least one friend
     (isSolo || selectedFriends.length > 0);
-
-  // Add console log to help debug validation
-  useEffect(() => {
-    console.log("Validation state:", {
-      goalName: goalName.trim() !== "",
-      category: category !== "",
-      color: color !== "",
-      endDateCondition:
-        !setEndDate ||
-        (endDateType === "duration"
-          ? durationValue.trim() !== ""
-          : specificEndDate !== null),
-      friendsCondition: isSolo || selectedFriends.length > 0,
-      isFormValid,
-    });
-  }, [
-    goalName,
-    category,
-    color,
-    setEndDate,
-    endDateType,
-    durationValue,
-    specificEndDate,
-    isSolo,
-    selectedFriends,
-    isFormValid,
-  ]);
 
   // Reset all form values to their defaults
   const resetAll = () => {
@@ -279,105 +279,102 @@ export default function CreateGoalScreen() {
       setShowColorPicker(false);
       setShowCategoryPicker(false);
       setSelectedFriends([]);
+      setCategoryId(null);
 
       console.log("Reset complete");
     }, 0);
   };
 
-  // Create a goal object from the form data
-  const createGoalObject = (): Goal => {
-    const goal: Goal = {
-      id: Date.now().toString(), // Generate a unique ID based on timestamp
-      title: goalName.trim(),
-      type: isSolo ? "solo" : "group",
-      category: category,
-      color: color,
-      frequency: frequency,
-      hasEndDate: setEndDate,
-      createdAt: new Date(),
-    };
-
-    if (setEndDate) {
-      goal.endDateType = endDateType as "duration" | "specificDate";
-
-      if (endDateType === "duration") {
-        goal.durationValue = durationValue;
-        goal.durationType = durationType;
-      } else {
-        goal.specificEndDate = specificEndDate;
-      }
+  // Format duration string for database
+  const formatDuration = (): string => {
+    if (!setEndDate) {
+      return "Ongoing";
     }
 
-    // Add invited friends for group goals
-    if (!isSolo && selectedFriends.length > 0) {
-      goal.invitedFriends = selectedFriends;
+    if (endDateType === "duration" && durationValue) {
+      return `${durationValue} ${durationType}`;
+    } else if (endDateType === "specificDate" && specificEndDate) {
+      return specificEndDate.toISOString().split("T")[0]; // Format as YYYY-MM-DD
     }
 
-    return goal;
+    return "Ongoing";
   };
 
-  // Save the goal data
-  const saveGoal = () => {
-    if (!isFormValid || isSubmitting) return;
+  // Format frequency string for database
+  const formatFrequency = (): string => {
+    return `${frequency} times per week`;
+  };
+
+  // Save the goal data to Supabase
+  const saveGoal = async () => {
+    if (!isFormValid || isSubmitting || !user || !categoryId) return;
 
     setIsSubmitting(true);
 
     try {
-      // Create the goal object
-      const goal = createGoalObject();
+      // Create the goal in the database
+      const newGoal = {
+        title: goalName.trim(),
+        frequency: formatFrequency(),
+        duration: formatDuration(),
+        color: color,
+        category_id: categoryId,
+        goal_type: isSolo ? "solo" : "group",
+        created_by: user.id,
+      };
 
-      // Log the goal data
-      console.log("Creating new goal:", goal);
+      console.log("Creating new goal:", newGoal);
 
-      // In a real app, you would save this to your database/state manager
-      // For now, we'll just simulate it with a success message
+      // Step 1: Create the goal first
+      const { data, error } = await goalService.createGoal(newGoal);
 
-      // Show success message
-      Alert.alert(
-        "Goal Created",
-        `Your '${goal.title}' ${goal.type} goal has been created successfully!${
-          goal.type === "group" && goal.invitedFriends
-            ? ` Invitations sent to ${goal.invitedFriends.length} friend${
-                goal.invitedFriends.length !== 1 ? "s" : ""
-              }.`
-            : ""
-        }`,
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              // Close the form after goal is created
-              handleClose();
-            },
-          },
-        ]
-      );
-    } catch (error) {
+      if (error) {
+        throw new Error(`Error creating goal: ${error.message}`);
+      }
+
+      const goalId = data?.id;
+
+      if (!goalId) {
+        throw new Error("Goal created but no ID returned");
+      }
+
+      // Step 2: Add participants if it's a group goal
+      if (!isSolo && selectedFriends.length > 0) {
+        const { error: participantsError } = await goalService.addParticipants(
+          goalId,
+          selectedFriends
+        );
+
+        if (participantsError) {
+          console.error("Error adding participants:", participantsError);
+          // Continue with success even if participants failed
+        }
+      }
+
+      // Step 3: Close the modal
+      handleClose();
+
+      // Step 4: Navigate to goals screen after a short delay
+      setTimeout(() => {
+        // Use a simpler navigation without params first
+        router.push("/(tabs)/goals");
+
+        // Then set the refresh parameter after a short delay
+        setTimeout(() => {
+          router.setParams({ refresh: Date.now().toString() });
+        }, 500);
+      }, 500);
+    } catch (error: any) {
       console.error("Error creating goal:", error);
       Alert.alert(
         "Error",
-        "There was a problem creating your goal. Please try again."
+        error.message ||
+          "There was a problem creating your goal. Please try again."
       );
     } finally {
       setIsSubmitting(false);
     }
   };
-
-  // Add effect to check initial state
-  useEffect(() => {
-    console.log("Component mounted with state:", {
-      isSolo,
-      goalName,
-      category,
-      color,
-      frequency,
-      setEndDate,
-      endDateType,
-      specificEndDate,
-      durationValue,
-      durationType,
-    });
-  }, []);
 
   // Handle color selection from the color picker
   const handleColorSelect = (selectedColor: string) => {

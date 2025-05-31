@@ -1,9 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
-import { router } from "expo-router";
-import React, { useState } from "react";
+import { router, useLocalSearchParams } from "expo-router";
+import React, { useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
-  Image,
   StatusBar,
   StyleSheet,
   Text,
@@ -11,49 +11,125 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { ProfileAvatar } from "../../components/common";
 import GoalBottomSheet from "../../components/goals/bottomSheets/GoalBottomSheet";
 import GoalCard from "../../components/goals/GoalCard";
 import { FontFamily } from "../../constants/fonts";
-import { GOALS, GOAL_TABS, Goal } from "../../constants/goalData";
+import { GOAL_TABS } from "../../constants/goalData";
 import { DarkTheme, DefaultTheme } from "../../constants/theme";
+import { useAuth } from "../../hooks/useAuth";
 import { useColorScheme } from "../../hooks/useColorScheme";
+import { goalService, GoalWithDetails } from "../../services/goalService";
 
 // Modified Tab options - rearranged with "Completed" at the end
 const TABS = GOAL_TABS;
 
 export default function GoalsScreen() {
+  const params = useLocalSearchParams();
+  const refresh = params.refresh; // Get the refresh parameter
   const colorScheme = useColorScheme();
   const theme = colorScheme === "dark" ? DarkTheme : DefaultTheme;
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState("all");
+  const { user } = useAuth();
 
   // State for the bottom sheet
   const [bottomSheetVisible, setBottomSheetVisible] = useState(false);
-  const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
+  const [selectedGoal, setSelectedGoal] = useState<GoalWithDetails | null>(
+    null
+  );
+
+  // State for goals and loading
+  const [goals, setGoals] = useState<GoalWithDetails[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false); // Separate refreshing state
+  const [error, setError] = useState<string | null>(null);
+
+  // Ref to track last refresh time to avoid too frequent refreshes
+  const lastRefreshTimeRef = useRef<number>(0);
+
+  // Fetch goals from the database
+  const fetchGoals = async (isRefreshing = false) => {
+    // If it's a refresh, set refreshing state instead of loading
+    if (isRefreshing) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
+
+    try {
+      const { data, error } = await goalService.getUserGoals();
+      if (error) {
+        throw new Error(error.message);
+      }
+      setGoals(data);
+
+      // Update last refresh time
+      lastRefreshTimeRef.current = Date.now();
+    } catch (err: any) {
+      console.error("Error fetching goals:", err);
+      setError("Failed to load goals. Please try again.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  // Handle pull-to-refresh
+  const handleRefresh = () => {
+    if (user) {
+      fetchGoals(true);
+    }
+  };
+
+  // Fetch goals when user changes or refresh parameter changes
+  useEffect(() => {
+    if (user) {
+      // Simple check to prevent refresh spam
+      const now = Date.now();
+      const lastRefresh = lastRefreshTimeRef.current;
+      const MIN_INTERVAL = 1000; // 1 second minimum between refreshes
+
+      if (now - lastRefresh < MIN_INTERVAL) {
+        console.log("Skipping refresh, too soon");
+        return;
+      }
+
+      console.log("Refreshing goals list");
+      lastRefreshTimeRef.current = now;
+      fetchGoals();
+    } else {
+      // Clear goals if no user is logged in
+      setGoals([]);
+      setLoading(false);
+    }
+  }, [user?.id, refresh]); // Re-fetch when user ID or refresh parameter changes
 
   // Filter goals based on active tab
   const filteredGoals = React.useMemo(() => {
+    if (!goals.length) return [];
+
     switch (activeTab) {
       case "completed":
-        return GOALS.filter((goal) => goal.completed);
+        return goals.filter((goal) => goal.completed);
       case "solo":
         // Filter for solo goals
-        return GOALS.filter(
-          (goal) => goal.goalType === "solo" && !goal.completed
+        return goals.filter(
+          (goal) => goal.goal_type === "solo" && !goal.completed
         );
       case "group":
         // Filter for group goals
-        return GOALS.filter(
-          (goal) => goal.goalType === "group" && !goal.completed
+        return goals.filter(
+          (goal) => goal.goal_type === "group" && !goal.completed
         );
       case "all":
       default:
-        return GOALS.filter((goal) => !goal.completed);
+        return goals.filter((goal) => !goal.completed);
     }
-  }, [activeTab]);
+  }, [activeTab, goals]);
 
   // Handle long press on a goal card
-  const handleGoalLongPress = (goal: Goal) => {
+  const handleGoalLongPress = (goal: GoalWithDetails) => {
     setSelectedGoal(goal);
     setBottomSheetVisible(true);
   };
@@ -92,12 +168,7 @@ export default function GoalsScreen() {
               borderStyle: "dashed",
             }}
           >
-            <Image
-              source={{
-                uri: "https://randomuser.me/api/portraits/women/11.jpg",
-              }}
-              style={[styles.profilePic, { borderWidth: 0 }]}
-            />
+            <ProfileAvatar user={user} size={36} style={styles.profilePic} />
           </View>
         </TouchableOpacity>
 
@@ -117,6 +188,79 @@ export default function GoalsScreen() {
           </TouchableOpacity>
         </View>
       </View>
+    );
+  };
+
+  // Render content based on loading/error state
+  const renderContent = () => {
+    if (loading) {
+      return (
+        <View style={styles.centeredContainer}>
+          <ActivityIndicator size="large" color="#0E96FF" />
+          <Text style={styles.messageText}>Loading goals...</Text>
+        </View>
+      );
+    }
+
+    if (error) {
+      return (
+        <View style={styles.centeredContainer}>
+          <Text style={styles.errorText}>{error}</Text>
+          <TouchableOpacity
+            style={styles.retryButton}
+            onPress={() => {
+              setError(null);
+              if (user) {
+                fetchGoals();
+              }
+            }}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (goals.length === 0) {
+      return (
+        <View style={styles.centeredContainer}>
+          <Text style={styles.messageText}>
+            No goals yet. Create your first goal!
+          </Text>
+          <TouchableOpacity
+            style={styles.createGoalButton}
+            onPress={() => router.push("/create-goal")}
+          >
+            <Text style={styles.createGoalButtonText}>Create Goal</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    if (filteredGoals.length === 0) {
+      return (
+        <View style={styles.centeredContainer}>
+          <Text style={styles.messageText}>No goals in this category</Text>
+        </View>
+      );
+    }
+
+    return (
+      <FlatList
+        data={filteredGoals}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.goalsList}
+        renderItem={({ item }) => (
+          <GoalCard goal={item} onLongPress={handleGoalLongPress} />
+        )}
+        showsVerticalScrollIndicator={false}
+        numColumns={1}
+        contentInsetAdjustmentBehavior="automatic"
+        scrollIndicatorInsets={{ right: 1 }}
+        removeClippedSubviews={false}
+        refreshing={refreshing}
+        onRefresh={handleRefresh}
+      />
     );
   };
 
@@ -199,20 +343,8 @@ export default function GoalsScreen() {
           </View>
         </View>
 
-        {/* Goals List */}
-        <FlatList
-          data={filteredGoals}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.goalsList}
-          renderItem={({ item }) => (
-            <GoalCard goal={item} onLongPress={handleGoalLongPress} />
-          )}
-          showsVerticalScrollIndicator={false}
-          numColumns={1}
-          contentInsetAdjustmentBehavior="automatic"
-          scrollIndicatorInsets={{ right: 1 }}
-          removeClippedSubviews={false}
-        />
+        {/* Goals Content */}
+        {renderContent()}
       </View>
 
       {/* Goal Bottom Sheet */}
@@ -220,7 +352,8 @@ export default function GoalsScreen() {
         <GoalBottomSheet
           visible={bottomSheetVisible}
           onClose={closeBottomSheet}
-          goal={selectedGoal}
+          goal={selectedGoal as any}
+          onGoalUpdated={fetchGoals}
         />
       )}
     </View>
@@ -338,5 +471,50 @@ const styles = StyleSheet.create({
   goalsList: {
     paddingTop: 10,
     paddingBottom: 80,
+  },
+  // New styles for loading, error and empty states
+  centeredContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 20,
+  },
+  messageText: {
+    fontSize: 16,
+    fontFamily: FontFamily.Medium,
+    color: "white",
+    marginTop: 10,
+    textAlign: "center",
+  },
+  errorText: {
+    fontSize: 16,
+    fontFamily: FontFamily.Medium,
+    color: "#FF6B6B",
+    marginTop: 10,
+    textAlign: "center",
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: "#0E96FF",
+    borderRadius: 20,
+  },
+  retryButtonText: {
+    color: "white",
+    fontFamily: FontFamily.SemiBold,
+    fontSize: 14,
+  },
+  createGoalButton: {
+    marginTop: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: "#0E96FF",
+    borderRadius: 20,
+  },
+  createGoalButtonText: {
+    color: "white",
+    fontFamily: FontFamily.SemiBold,
+    fontSize: 14,
   },
 });

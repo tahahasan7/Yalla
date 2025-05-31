@@ -1,53 +1,16 @@
 import { FontFamily } from "@/constants/fonts";
+import { useAuth } from "@/hooks/useAuth";
+import { friendService } from "@/services/friendService";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ProfileAvatar } from "../../components/common";
 import FriendsBottomSheet from "./bottomSheets/FriendsBottomSheet";
-
-// Sample data for friends
-const SAMPLE_FRIENDS = [
-  {
-    id: "1",
-    name: "Sarah Johnson",
-    avatar: "https://i.pravatar.cc/150?img=1",
-    selected: false,
-  },
-  {
-    id: "2",
-    name: "Michael Chen",
-    avatar: "https://i.pravatar.cc/150?img=2",
-    selected: false,
-  },
-  {
-    id: "3",
-    name: "Emma Rodriguez",
-    avatar: "https://i.pravatar.cc/150?img=3",
-    selected: false,
-  },
-  {
-    id: "4",
-    name: "David Kim",
-    avatar: "https://i.pravatar.cc/150?img=4",
-    selected: false,
-  },
-  {
-    id: "5",
-    name: "Olivia Patel",
-    avatar: "https://i.pravatar.cc/150?img=5",
-    selected: false,
-  },
-  {
-    id: "6",
-    name: "James Wilson",
-    avatar: "https://i.pravatar.cc/150?img=6",
-    selected: false,
-  },
-];
 
 interface Friend {
   id: string;
   name: string;
-  avatar: string;
+  profile_pic_url: string;
   selected: boolean;
 }
 
@@ -60,7 +23,7 @@ interface FriendsSectionProps {
 const FriendAvatar = ({ avatar }: { avatar: string }) => {
   return (
     <View style={styles.previewAvatarContainer}>
-      <Image source={{ uri: avatar }} style={styles.previewAvatar} />
+      <ProfileAvatar imageUri={avatar} size={30} />
     </View>
   );
 };
@@ -69,28 +32,44 @@ const FriendsSection: React.FC<FriendsSectionProps> = ({
   selectedFriends,
   setSelectedFriends,
 }) => {
+  const { user } = useAuth();
   const [showBottomSheet, setShowBottomSheet] = useState(false);
-  const [friends, setFriends] = useState<Friend[]>(
-    SAMPLE_FRIENDS.map((friend) => ({
-      ...friend,
-      selected: selectedFriends.includes(friend.id),
-    }))
-  );
+  const [friends, setFriends] = useState<Friend[]>([]);
+  const [loading, setLoading] = useState(true);
 
   // Get the full friend objects of selected friends
-  const selectedFriendObjects = SAMPLE_FRIENDS.filter((f) =>
+  const selectedFriendObjects = friends.filter((f) =>
     selectedFriends.includes(f.id)
   );
 
-  // Update friend selection status when selectedFriends changes
+  // Load friends from the database
   useEffect(() => {
-    setFriends(
-      SAMPLE_FRIENDS.map((friend) => ({
-        ...friend,
-        selected: selectedFriends.includes(friend.id),
-      }))
-    );
-  }, [selectedFriends]);
+    const loadFriends = async () => {
+      if (!user) return;
+
+      setLoading(true);
+      try {
+        const { data, error } = await friendService.getFriends(user.id);
+
+        if (error) {
+          console.error("Error loading friends:", error);
+        } else if (data) {
+          // Transform the data to include selected status
+          const friendsWithSelection = data.map((friend) => ({
+            ...friend,
+            selected: selectedFriends.includes(friend.id),
+          }));
+          setFriends(friendsWithSelection);
+        }
+      } catch (error) {
+        console.error("Unexpected error loading friends:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadFriends();
+  }, [user, selectedFriends]);
 
   // Handle bottom sheet events
   const openBottomSheet = () => {
@@ -123,7 +102,7 @@ const FriendsSection: React.FC<FriendsSectionProps> = ({
           <View style={styles.previewRight}>
             {/* Show avatars of first few friends without animation */}
             {selectedFriendObjects.slice(0, 3).map((friend) => (
-              <FriendAvatar key={friend.id} avatar={friend.avatar} />
+              <FriendAvatar key={friend.id} avatar={friend.profile_pic_url} />
             ))}
 
             {/* Show count if there are more than 3 friends */}
@@ -142,7 +121,9 @@ const FriendsSection: React.FC<FriendsSectionProps> = ({
           onPress={openBottomSheet}
         >
           <Ionicons name="people" size={18} color="#aaa" />
-          <Text style={styles.emptyPreviewText}>Tap to invite friends</Text>
+          <Text style={styles.emptyPreviewText}>
+            {loading ? "Loading friends..." : "Tap to invite friends"}
+          </Text>
         </TouchableOpacity>
       )}
 
@@ -150,6 +131,7 @@ const FriendsSection: React.FC<FriendsSectionProps> = ({
       <FriendsBottomSheet
         visible={showBottomSheet}
         onClose={closeBottomSheet}
+        friends={friends}
         selectedFriends={selectedFriends}
         onFriendsSelect={handleFriendsSelect}
       />
@@ -199,11 +181,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#000",
     overflow: "hidden",
-  },
-  previewAvatar: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
   },
   previewMore: {
     width: 30,

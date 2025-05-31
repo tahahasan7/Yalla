@@ -6,7 +6,6 @@ import {
   Dimensions,
   Easing,
   FlatList,
-  Image,
   Modal,
   PanResponder,
   StyleSheet,
@@ -16,61 +15,23 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
+import { ProfileAvatar } from "../../../components/common";
 
 const { height } = Dimensions.get("window");
 
 const DRAG_THRESHOLD = 120; // Distance user needs to drag to dismiss
 
-// Sample data for friends
-const SAMPLE_FRIENDS = [
-  {
-    id: "1",
-    name: "Sarah Johnson",
-    avatar: "https://i.pravatar.cc/150?img=1",
-    selected: false,
-  },
-  {
-    id: "2",
-    name: "Michael Chen",
-    avatar: "https://i.pravatar.cc/150?img=2",
-    selected: false,
-  },
-  {
-    id: "3",
-    name: "Emma Rodriguez",
-    avatar: "https://i.pravatar.cc/150?img=3",
-    selected: false,
-  },
-  {
-    id: "4",
-    name: "David Kim",
-    avatar: "https://i.pravatar.cc/150?img=4",
-    selected: false,
-  },
-  {
-    id: "5",
-    name: "Olivia Patel",
-    avatar: "https://i.pravatar.cc/150?img=5",
-    selected: false,
-  },
-  {
-    id: "6",
-    name: "James Wilson",
-    avatar: "https://i.pravatar.cc/150?img=6",
-    selected: false,
-  },
-];
-
 interface Friend {
   id: string;
   name: string;
-  avatar: string;
+  profile_pic_url: string;
   selected: boolean;
 }
 
 interface FriendsBottomSheetProps {
   visible: boolean;
   onClose: () => void;
+  friends: Friend[];
   selectedFriends: string[];
   onFriendsSelect: (friendIds: string[]) => void;
 }
@@ -88,11 +49,13 @@ const FriendsBottomSheet = (props: FriendsBottomSheetProps) => {
   const [tempSelectedFriends, setTempSelectedFriends] = useState<string[]>([]);
 
   // Local state for friends data
-  const [friends, setFriends] = useState<Friend[]>([]);
+  const [localFriends, setLocalFriends] = useState<Friend[]>([]);
 
   // Clear all selected friends
   const clearAllFriends = () => {
-    setFriends(friends.map((friend) => ({ ...friend, selected: false })));
+    setLocalFriends(
+      localFriends.map((friend) => ({ ...friend, selected: false }))
+    );
     setTempSelectedFriends([]);
   };
 
@@ -102,8 +65,8 @@ const FriendsBottomSheet = (props: FriendsBottomSheetProps) => {
       setTempSelectedFriends([...props.selectedFriends]);
 
       // Reset the friends data with updated selected states
-      setFriends(
-        SAMPLE_FRIENDS.map((friend) => ({
+      setLocalFriends(
+        props.friends.map((friend) => ({
           ...friend,
           selected: props.selectedFriends.includes(friend.id),
         }))
@@ -112,7 +75,7 @@ const FriendsBottomSheet = (props: FriendsBottomSheetProps) => {
       // Clear search when sheet opens
       setSearchQuery("");
     }
-  }, [props.visible, props.selectedFriends]);
+  }, [props.visible, props.selectedFriends, props.friends]);
 
   // Setup pan responder for drag gestures
   const panResponder = useRef(
@@ -188,12 +151,12 @@ const FriendsBottomSheet = (props: FriendsBottomSheetProps) => {
   // Toggle friend selection
   const toggleFriendSelection = (friendId: string) => {
     // Update local friends data
-    const updatedFriends = friends.map((friend) =>
+    const updatedFriends = localFriends.map((friend) =>
       friend.id === friendId
         ? { ...friend, selected: !friend.selected }
         : friend
     );
-    setFriends(updatedFriends);
+    setLocalFriends(updatedFriends);
 
     // Update temporary selection state
     const updatedSelection = updatedFriends
@@ -204,7 +167,7 @@ const FriendsBottomSheet = (props: FriendsBottomSheetProps) => {
   };
 
   // Filter friends based on search query
-  const filteredFriends = friends.filter((friend) =>
+  const filteredFriends = localFriends.filter((friend) =>
     friend.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
@@ -224,7 +187,7 @@ const FriendsBottomSheet = (props: FriendsBottomSheetProps) => {
         style={[styles.friendItem, item.selected && styles.selectedFriendItem]}
         onPress={() => toggleFriendSelection(item.id)}
       >
-        <Image source={{ uri: item.avatar }} style={styles.avatar} />
+        <ProfileAvatar imageUri={item.profile_pic_url} size={40} />
         <Text style={styles.friendName}>{item.name}</Text>
         <View style={styles.checkboxContainer}>
           <View
@@ -237,7 +200,7 @@ const FriendsBottomSheet = (props: FriendsBottomSheetProps) => {
         </View>
       </TouchableOpacity>
     ),
-    [friends] // Re-create when friends change
+    [localFriends] // Re-create when friends change
   );
 
   const keyExtractor = React.useCallback((item: Friend) => item.id, []);
@@ -249,108 +212,95 @@ const FriendsBottomSheet = (props: FriendsBottomSheetProps) => {
 
   return (
     <Modal
-      transparent={true}
+      transparent
       visible={props.visible}
-      animationType="none"
       onRequestClose={closeWithoutSaving}
+      animationType="none"
     >
-      <View style={StyleSheet.absoluteFill}>
-        {/* Backdrop with fade animation */}
+      <TouchableWithoutFeedback onPress={closeWithoutSaving}>
         <Animated.View
-          style={[styles.modalOverlay, { opacity: modalBackgroundOpacity }]}
-        >
-          <TouchableWithoutFeedback onPress={closeWithoutSaving}>
-            <View style={StyleSheet.absoluteFill} />
-          </TouchableWithoutFeedback>
-        </Animated.View>
+          style={[styles.modalBackground, { opacity: modalBackgroundOpacity }]}
+        />
+      </TouchableWithoutFeedback>
 
-        {/* Modal content with slide animation */}
-        <Animated.View
-          style={[
-            styles.modalContent,
-            { transform: [{ translateY: combinedTransform }] },
-          ]}
-          {...panResponder.panHandlers}
-        >
-          {/* Drag indicator at top of sheet */}
-          <View style={styles.dragIndicatorContainer}>
-            <View style={styles.dragIndicator} />
+      <Animated.View
+        style={[
+          styles.modalContainer,
+          {
+            transform: [{ translateY: combinedTransform }],
+          },
+        ]}
+      >
+        {/* Drag handle */}
+        <View style={styles.dragHandleContainer} {...panResponder.panHandlers}>
+          <View style={styles.dragHandle} />
+        </View>
+
+        <View style={styles.modalContent}>
+          <View style={styles.header}>
+            <Text style={styles.title}>Select Friends</Text>
+
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={closeWithoutSaving}
+            >
+              <Ionicons name="close" size={24} color="white" />
+            </TouchableOpacity>
           </View>
 
-          {/* Close button (X) in top right */}
-          <TouchableOpacity
-            style={styles.closeButton}
-            onPress={closeWithoutSaving}
-          >
-            <Ionicons name="close" size={24} color="#777777" />
-          </TouchableOpacity>
+          {/* Search input */}
+          <View style={styles.searchContainer}>
+            <Ionicons name="search" size={20} color="#999" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search friends"
+              placeholderTextColor="#999"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+            {searchQuery.length > 0 && (
+              <TouchableOpacity
+                style={styles.clearButton}
+                onPress={() => setSearchQuery("")}
+              >
+                <Ionicons name="close-circle" size={18} color="#999" />
+              </TouchableOpacity>
+            )}
+          </View>
 
-          {/* Main content container */}
-          <View style={styles.contentWrapper}>
-            {/* Friends Picker Header */}
-            <View style={styles.friendsHeader}>
-              <Ionicons
-                name="people"
-                size={24}
-                color="#fff"
-                style={styles.friendsIcon}
-              />
-              <Text style={styles.friendsTitle}>Invite Friends</Text>
-            </View>
+          {/* Selection info and clear button */}
+          <View style={styles.selectionContainer}>
+            <Text style={styles.selectionInfo}>
+              {tempSelectedFriends.length} selected
+            </Text>
+            {tempSelectedFriends.length > 0 && (
+              <TouchableOpacity
+                style={styles.clearAllButton}
+                onPress={clearAllFriends}
+              >
+                <Text style={styles.clearAllText}>Clear All</Text>
+              </TouchableOpacity>
+            )}
+          </View>
 
-            {/* Search input */}
-            <View style={styles.searchContainer}>
-              <Ionicons
-                name="search"
-                size={20}
-                color="#777"
-                style={styles.searchIcon}
-              />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search friends"
-                placeholderTextColor="#777"
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-              />
-            </View>
+          {/* Friends list */}
+          <FlatList
+            data={filteredFriends}
+            renderItem={renderFriendItem}
+            keyExtractor={keyExtractor}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={true}
+            ListEmptyComponent={ListEmptyComponent}
+          />
 
-            {/* Selected count and clear all button */}
-            <View style={styles.selectionHeaderContainer}>
-              <Text style={styles.selectedCountText}>
-                {tempSelectedFriends.length} friend
-                {tempSelectedFriends.length !== 1 ? "s" : ""} selected
-              </Text>
-              {tempSelectedFriends.length > 0 && (
-                <TouchableOpacity onPress={clearAllFriends}>
-                  <Text style={styles.clearAllButton}>Clear All</Text>
-                </TouchableOpacity>
-              )}
-            </View>
-
-            {/* Friends list inside container with defined bounds */}
-            <View style={styles.friendsListContainer}>
-              <FlatList
-                data={filteredFriends}
-                keyExtractor={keyExtractor}
-                style={styles.friendsList}
-                showsVerticalScrollIndicator={false}
-                ListEmptyComponent={ListEmptyComponent}
-                renderItem={renderFriendItem}
-                // Additional performance optimizations
-                removeClippedSubviews={true}
-                maxToRenderPerBatch={10}
-                windowSize={5}
-                initialNumToRender={6}
-                getItemLayout={(data, index) => ({
-                  length: 64, // Estimated height of each item
-                  offset: 64 * index,
-                  index,
-                })}
-              />
-            </View>
-
-            {/* Save button */}
+          {/* Action buttons */}
+          <View style={styles.actionButtons}>
+            <TouchableOpacity
+              style={styles.cancelButton}
+              onPress={closeWithoutSaving}
+            >
+              <Text style={styles.buttonText}>Cancel</Text>
+            </TouchableOpacity>
             <TouchableOpacity
               style={[
                 styles.saveButton,
@@ -370,87 +320,58 @@ const FriendsBottomSheet = (props: FriendsBottomSheetProps) => {
               </Text>
             </TouchableOpacity>
           </View>
-        </Animated.View>
-      </View>
+        </View>
+      </Animated.View>
     </Modal>
   );
 };
 
 const styles = StyleSheet.create({
-  modalOverlay: {
-    ...StyleSheet.absoluteFillObject,
+  modalBackground: {
+    flex: 1,
     backgroundColor: "rgba(0, 0, 0, 0.7)",
     justifyContent: "flex-end",
-    zIndex: 2000,
   },
-  modalContent: {
+  modalContainer: {
     position: "absolute",
-    bottom: 20,
+    bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: "rgb(23, 23, 23)",
-    borderRadius: 35,
-    paddingHorizontal: 20,
-    paddingTop: 4,
-    margin: 10,
-    paddingBottom: 36,
-    maxHeight: "80%",
-    shadowColor: "#000",
-    shadowOffset: {
-      width: 0,
-      height: 6,
-    },
-    shadowOpacity: 0.4,
-    shadowRadius: 10,
-    elevation: 10,
-    zIndex: 2001,
+    backgroundColor: "#1A1A1A",
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    height: "80%",
+    paddingBottom: 20,
   },
-  contentWrapper: {
-    marginTop: 20,
-    paddingTop: 5,
-  },
-  dragIndicatorContainer: {
-    alignItems: "center",
-    paddingVertical: 10,
-  },
-  dragIndicator: {
-    width: 50,
-    height: 5,
-    backgroundColor: "#444444",
-    borderRadius: 3,
-  },
-  closeButton: {
-    position: "absolute",
-    top: 16,
-    right: 20,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: "#222222",
+  dragHandleContainer: {
+    width: "100%",
+    height: 30,
     alignItems: "center",
     justifyContent: "center",
-    zIndex: 10,
-    elevation: 5, // Android elevation
   },
-  friendsHeader: {
+  dragHandle: {
+    width: 40,
+    height: 5,
+    backgroundColor: "#444",
+    borderRadius: 3,
+  },
+  modalContent: {
+    flex: 1,
+    padding: 16,
+  },
+  header: {
     flexDirection: "row",
+    justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 10,
-    marginBottom: 20,
-  },
-  friendsIcon: {
-    marginRight: 10,
-  },
-  friendsTitle: {
-    fontFamily: FontFamily.SemiBold,
-    fontSize: 20,
-    color: "#FFFFFF",
-  },
-  friendsDescription: {
-    fontFamily: FontFamily.Regular,
-    fontSize: 14,
-    color: "#BBBBBB",
     marginBottom: 16,
+  },
+  title: {
+    fontSize: 18,
+    fontFamily: FontFamily.SemiBold,
+    color: "white",
+  },
+  closeButton: {
+    padding: 4,
   },
   searchContainer: {
     flexDirection: "row",
@@ -458,50 +379,55 @@ const styles = StyleSheet.create({
     backgroundColor: "#2C2C2C",
     borderRadius: 12,
     paddingHorizontal: 12,
-    height: 40,
     marginBottom: 16,
-  },
-  searchIcon: {
-    marginRight: 8,
   },
   searchInput: {
     flex: 1,
+    height: 40,
     color: "white",
     fontFamily: FontFamily.Regular,
-    fontSize: 14,
-    height: 40,
+    marginLeft: 8,
   },
-  friendsListContainer: {
-    height: 380, // Fixed height container
+  clearButton: {
+    padding: 4,
   },
-  friendsList: {
-    flex: 1,
+  selectionContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  selectionInfo: {
+    color: "#999",
+    fontFamily: FontFamily.Regular,
+  },
+  clearAllButton: {
+    padding: 4,
+  },
+  clearAllText: {
+    color: "#0E96FF",
+    fontFamily: FontFamily.Medium,
+  },
+  listContent: {
+    paddingVertical: 8,
   },
   friendItem: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#222",
-    borderRadius: 15,
-    padding: 12,
-    marginBottom: 10,
-    height: 64, // Fixed height for better performance
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: "#2C2C2C",
   },
   selectedFriendItem: {
-    backgroundColor: "#333",
-    borderWidth: 1,
-    borderColor: "#0E96FF",
-  },
-  avatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 12,
+    backgroundColor: "rgba(14, 150, 255, 0.1)",
+    borderRadius: 12,
+    paddingHorizontal: 8,
   },
   friendName: {
     flex: 1,
+    marginLeft: 12,
     color: "white",
     fontFamily: FontFamily.Medium,
-    fontSize: 16,
   },
   checkboxContainer: {
     marginLeft: 8,
@@ -511,54 +437,52 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: "#777",
-    justifyContent: "center",
+    borderColor: "#444",
     alignItems: "center",
+    justifyContent: "center",
   },
   checkboxSelected: {
     backgroundColor: "#0E96FF",
     borderColor: "#0E96FF",
   },
-  emptyListText: {
-    color: "#777",
-    textAlign: "center",
-    padding: 20,
-    fontFamily: FontFamily.Regular,
-  },
-  selectionHeaderContainer: {
+  actionButtons: {
     flexDirection: "row",
     justifyContent: "space-between",
+    paddingTop: 16,
+  },
+  cancelButton: {
+    flex: 1,
+    paddingVertical: 12,
+    marginRight: 8,
     alignItems: "center",
-    paddingVertical: 8,
-    marginBottom: 8,
-  },
-  selectedCountText: {
-    color: "#999",
-    fontFamily: FontFamily.Regular,
-    fontSize: 14,
-  },
-  clearAllButton: {
-    color: "#0E96FF",
-    fontFamily: FontFamily.Medium,
-    fontSize: 14,
   },
   saveButton: {
+    flex: 1,
     backgroundColor: "#0E96FF",
-    borderRadius: 25,
-    paddingVertical: 14,
+    borderRadius: 12,
+    paddingVertical: 12,
+    marginLeft: 8,
     alignItems: "center",
-    marginTop: 10,
   },
   saveButtonDisabled: {
-    backgroundColor: "#333333",
+    backgroundColor: "#2C2C2C",
+  },
+  buttonText: {
+    color: "white",
+    fontFamily: FontFamily.Medium,
   },
   saveButtonText: {
+    color: "white",
     fontFamily: FontFamily.SemiBold,
-    fontSize: 16,
-    color: "#FFFFFF",
   },
   saveButtonTextDisabled: {
-    color: "#777777",
+    color: "#999",
+  },
+  emptyListText: {
+    color: "#999",
+    textAlign: "center",
+    marginTop: 20,
+    fontFamily: FontFamily.Regular,
   },
 });
 

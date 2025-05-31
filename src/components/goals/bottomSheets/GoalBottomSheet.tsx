@@ -2,11 +2,13 @@ import { Icon } from "@/components/common";
 import DeleteButton from "@/components/goals/bottomSheets/DeleteButton";
 import FlowStateIcon from "@/components/social/FlowStateIcon";
 import { FontFamily } from "@/constants/fonts";
-import { CATEGORIES, Goal } from "@/constants/goalData";
+import { CATEGORIES } from "@/constants/goalData";
+import { goalService, GoalWithDetails } from "@/services/goalService";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useEffect, useRef, useState } from "react";
 import {
+  Alert,
   Animated,
   Dimensions,
   Easing,
@@ -24,12 +26,18 @@ const { height } = Dimensions.get("window");
 interface GoalBottomSheetProps {
   visible: boolean;
   onClose: () => void;
-  goal: Goal;
+  goal: GoalWithDetails;
+  onGoalUpdated?: () => void; // Callback for when a goal is updated/deleted
 }
 
 const DRAG_THRESHOLD = 120; // Distance user needs to drag to dismiss
 
-const GoalBottomSheet = ({ visible, onClose, goal }: GoalBottomSheetProps) => {
+const GoalBottomSheet = ({
+  visible,
+  onClose,
+  goal,
+  onGoalUpdated,
+}: GoalBottomSheetProps) => {
   // Animation values
   const modalBackgroundOpacity = useRef(new Animated.Value(0)).current;
   const modalAnimation = useRef(new Animated.Value(height)).current;
@@ -39,17 +47,21 @@ const GoalBottomSheet = ({ visible, onClose, goal }: GoalBottomSheetProps) => {
   const [isCompleted, setIsCompleted] = useState<boolean>(
     goal.completed || false
   );
+  const [isLoading, setIsLoading] = useState(false);
 
   // Get the category icon for the goal
   const getCategoryIcon = () => {
     // Find the category in CATEGORIES array
-    const category = CATEGORIES.find((cat) => cat.name === goal.category);
+    const category = CATEGORIES.find((cat) => cat.name === goal.category?.name);
 
     // If category found, return the icon info, otherwise return a default
-    return category || { name: "Default", icon: goal.icon };
+    return category || { name: "Default", icon: "Fun" };
   };
 
   const categoryIcon = getCategoryIcon();
+
+  // Determine flow state (this is not in database yet, so use a default)
+  const flowState = "still" as "still" | "kindling" | "glowing" | "flowing";
 
   // Update local state when goal prop changes
   useEffect(() => {
@@ -128,34 +140,122 @@ const GoalBottomSheet = ({ visible, onClose, goal }: GoalBottomSheetProps) => {
     });
   };
 
-  const handleAction = (action: string) => {
+  const handleAction = async (action: string) => {
     // Trigger haptic feedback
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    if (isLoading) return;
 
     // Handle different actions
     switch (action) {
       case "complete":
         // Only allow marking as complete if not already completed
         if (!goal.completed) {
-          setIsCompleted(true);
-          // In a real app, you would also update the goal in state/database
+          // Show confirmation first
+          Alert.alert(
+            "Complete Goal",
+            `Are you sure you want to mark "${goal.title}" as completed?`,
+            [
+              {
+                text: "Cancel",
+                style: "cancel",
+              },
+              {
+                text: "Complete",
+                onPress: async () => {
+                  try {
+                    setIsLoading(true);
+
+                    // Update the goal in the database
+                    const { error } = await goalService.updateGoal(goal.id, {
+                      completed: true,
+                      completed_date: new Date().toISOString().split("T")[0], // Today's date in YYYY-MM-DD format
+                    });
+
+                    if (error) throw error;
+
+                    // Update local state
+                    setIsCompleted(true);
+
+                    // Notify parent component to refresh goals
+                    if (onGoalUpdated) onGoalUpdated();
+
+                    // Close the bottom sheet after a short delay
+                    setTimeout(() => {
+                      handleClose();
+                    }, 500);
+                  } catch (error) {
+                    console.error("Error completing goal:", error);
+                    Alert.alert(
+                      "Error",
+                      "Failed to mark goal as complete. Please try again."
+                    );
+                  } finally {
+                    setIsLoading(false);
+                  }
+                },
+              },
+            ]
+          );
         }
         break;
+
       case "edit":
         // Only allow editing if goal is not completed
         if (!goal.completed) {
-          // Close this sheet and navigate to edit screen
+          // Close this sheet
           handleClose();
-          // You would typically navigate to edit screen here
-          console.log("Edit goal:", goal.id);
+
+          // For now, just show an alert as the edit goal screen doesn't exist yet
+          Alert.alert(
+            "Edit Goal",
+            `This feature is coming soon! You'll be able to edit ${goal.title} in a future update.`
+          );
         }
         break;
+
       case "delete":
-        // Close this sheet and show delete confirmation
-        handleClose();
-        // You would show a confirmation dialog here
-        console.log("Delete goal:", goal.id);
+        // Show confirmation dialog for deletion
+        Alert.alert(
+          "Delete Goal",
+          `Are you sure you want to delete "${goal.title}"?`,
+          [
+            {
+              text: "Cancel",
+              style: "cancel",
+            },
+            {
+              text: "Delete",
+              style: "destructive",
+              onPress: async () => {
+                try {
+                  setIsLoading(true);
+
+                  // Delete the goal from the database
+                  const { error } = await goalService.deleteGoal(goal.id);
+
+                  if (error) throw error;
+
+                  // Notify parent component to refresh goals
+                  if (onGoalUpdated) onGoalUpdated();
+
+                  // Close the bottom sheet
+                  handleClose();
+                } catch (error) {
+                  console.error("Error deleting goal:", error);
+                  Alert.alert(
+                    "Error",
+                    "Failed to delete goal. Please try again."
+                  );
+                } finally {
+                  setIsLoading(false);
+                }
+              },
+            },
+          ]
+        );
         break;
+
       default:
         break;
     }
@@ -208,9 +308,9 @@ const GoalBottomSheet = ({ visible, onClose, goal }: GoalBottomSheetProps) => {
                 <View style={styles.completedBadge}>
                   <Text style={styles.completedText}>Completed</Text>
                 </View>
-                {goal.completedDate && (
+                {goal.completed_date && (
                   <Text style={styles.completedDate}>
-                    on {goal.completedDate}
+                    on {goal.completed_date}
                   </Text>
                 )}
               </View>
@@ -235,7 +335,7 @@ const GoalBottomSheet = ({ visible, onClose, goal }: GoalBottomSheetProps) => {
                   <Text style={styles.goalMeta}>{goal.frequency}</Text>
                 </View>
               </View>
-              <FlowStateIcon flowState={goal.flowState} size={22} />
+              <FlowStateIcon flowState={flowState} size={22} />
             </View>
 
             {/* Action Buttons */}

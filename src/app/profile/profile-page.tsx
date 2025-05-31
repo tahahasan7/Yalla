@@ -1,7 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React from "react";
+import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Dimensions,
   FlatList,
   Image,
@@ -14,10 +15,11 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Icon } from "../../components/common";
+import { Icon, ProfileAvatar } from "../../components/common";
 import { FontFamily } from "../../constants/fonts";
 import { POSTS } from "../../constants/socialData";
 import { DarkTheme, DefaultTheme } from "../../constants/theme";
+import { getProfileImage, useAuth } from "../../hooks/useAuth";
 import { useColorScheme } from "../../hooks/useColorScheme";
 import { Post } from "../../types/social";
 
@@ -26,14 +28,6 @@ const { width } = Dimensions.get("window");
 const NUM_COLUMNS = 3;
 const ITEM_WIDTH = width / NUM_COLUMNS;
 const ITEM_HEIGHT = ITEM_WIDTH;
-
-// Mock user data (replace with actual user data in a real app)
-const USER = {
-  name: "Alex Johnson",
-  username: "@alexj",
-  profilePic: "https://randomuser.me/api/portraits/men/32.jpg",
-  bio: "Architecture enthusiast & urban photographer",
-};
 
 // Stats for the user
 const USER_STATS = {
@@ -50,8 +44,8 @@ const USER_POSTS: Post[] = [
     imageUrl:
       "https://images.unsplash.com/photo-1511818966892-d7d671e672a2?q=80&w=1000",
     user: {
-      name: USER.name,
-      profilePic: USER.profilePic,
+      name: "User",
+      profilePic: "https://randomuser.me/api/portraits/men/32.jpg",
       flowState: "glowing",
     },
     goal: {
@@ -73,8 +67,8 @@ const USER_POSTS: Post[] = [
     imageUrl:
       "https://images.unsplash.com/photo-1486718448742-163732cd1544?q=80&w=1000",
     user: {
-      name: USER.name,
-      profilePic: USER.profilePic,
+      name: "User",
+      profilePic: "https://randomuser.me/api/portraits/men/32.jpg",
       flowState: "flowing",
     },
     goal: {
@@ -98,6 +92,27 @@ export default function ProfilePage() {
   const colorScheme = useColorScheme();
   const theme = colorScheme === "dark" ? DarkTheme : DefaultTheme;
   const router = useRouter();
+  const { user, loading } = useAuth();
+  const [userPosts, setUserPosts] = useState<Post[]>([]);
+  const [postsLoading, setPostsLoading] = useState(true);
+
+  // Update posts with correct user data
+  useEffect(() => {
+    if (user) {
+      // In a real app, you would fetch actual posts from Supabase here
+      // For now, we'll just update the mock data with the user's info
+      const updatedPosts = USER_POSTS.map((post) => ({
+        ...post,
+        user: {
+          ...post.user,
+          name: user.name || "User",
+          profilePic: getProfileImage(user),
+        },
+      }));
+      setUserPosts(updatedPosts);
+      setPostsLoading(false);
+    }
+  }, [user]);
 
   // Render post item in grid
   const renderPostItem = ({ item, index }: { item: Post; index: number }) => {
@@ -108,15 +123,55 @@ export default function ProfilePage() {
     );
   };
 
+  // Show loading state while user data is being fetched
+  if (loading) {
+    return (
+      <View
+        style={[
+          styles.loadingContainer,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
+        <ActivityIndicator size="large" color="#0E96FF" />
+        <Text style={[styles.loadingText, { color: theme.colors.text }]}>
+          Loading profile...
+        </Text>
+      </View>
+    );
+  }
+
+  // Redirect to login if no user
+  if (!user) {
+    // In a real app, you might want to redirect to login
+    return (
+      <View
+        style={[
+          styles.loadingContainer,
+          { backgroundColor: theme.colors.background },
+        ]}
+      >
+        <Text style={[styles.loadingText, { color: theme.colors.text }]}>
+          Please log in to view your profile
+        </Text>
+        <TouchableOpacity
+          style={styles.loginButton}
+          onPress={() => router.push("/")}
+        >
+          <Text style={styles.loginButtonText}>Log In</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
   return (
     <View
       style={[styles.container, { backgroundColor: theme.colors.background }]}
     >
       {/* Background blur effect with the first post image */}
-      {USER_POSTS.length > 0 && (
+      {userPosts.length > 0 && (
         <View style={styles.backgroundContainer}>
           <Image
-            source={{ uri: USER_POSTS[0].imageUrl }}
+            source={{ uri: userPosts[0].imageUrl }}
             style={styles.backgroundImage}
             blurRadius={Platform.OS === "ios" ? 50 : 20}
           />
@@ -163,17 +218,19 @@ export default function ProfilePage() {
         <ScrollView showsVerticalScrollIndicator={false}>
           {/* Profile info section */}
           <View style={styles.profileSection}>
-            <Image
-              source={{ uri: USER.profilePic }}
-              style={styles.profileImage}
+            <ProfileAvatar
+              user={user}
+              size={90}
+              style={styles.profileImageContainer}
+              borderRadius={28}
             />
             <Text style={[styles.userName, { color: theme.colors.text }]}>
-              {USER.name}
+              {user.name || "User"}
             </Text>
             <Text
               style={[styles.userHandle, { color: theme.colors.text + "80" }]}
             >
-              {USER.username}
+              @{user.username || user.email?.split("@")[0] || "user"}
             </Text>
 
             <View style={styles.profileActionButtons}>
@@ -208,14 +265,25 @@ export default function ProfilePage() {
           </View>
 
           {/* Grid of posts */}
-          <FlatList
-            data={USER_POSTS}
-            renderItem={renderPostItem}
-            keyExtractor={(item) => item.id}
-            numColumns={NUM_COLUMNS}
-            scrollEnabled={false}
-            style={styles.postsGrid}
-          />
+          {postsLoading ? (
+            <View style={styles.postsLoadingContainer}>
+              <ActivityIndicator size="small" color="#0E96FF" />
+              <Text
+                style={[styles.postsLoadingText, { color: theme.colors.text }]}
+              >
+                Loading posts...
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={userPosts}
+              renderItem={renderPostItem}
+              keyExtractor={(item) => item.id}
+              numColumns={NUM_COLUMNS}
+              scrollEnabled={false}
+              style={styles.postsGrid}
+            />
+          )}
         </ScrollView>
       </SafeAreaView>
     </View>
@@ -275,10 +343,9 @@ const styles = StyleSheet.create({
     justifyContent: "flex-start",
     width: "100%",
   },
-  profileImage: {
+  profileImageContainer: {
     width: 90,
     height: 90,
-    borderRadius: 28,
     marginBottom: 16,
   },
   userName: {
@@ -349,5 +416,38 @@ const styles = StyleSheet.create({
   postImage: {
     width: "100%",
     height: "100%",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: FontFamily.Medium,
+    marginTop: 16,
+    textAlign: "center",
+  },
+  loginButton: {
+    marginTop: 20,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    backgroundColor: "#0E96FF",
+    borderRadius: 14,
+  },
+  loginButtonText: {
+    fontSize: 16,
+    fontFamily: FontFamily.SemiBold,
+    color: "white",
+  },
+  postsLoadingContainer: {
+    padding: 24,
+    alignItems: "center",
+  },
+  postsLoadingText: {
+    fontSize: 14,
+    fontFamily: FontFamily.Medium,
+    marginTop: 8,
   },
 });

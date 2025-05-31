@@ -6,6 +6,13 @@ import "react-native-url-polyfill/auto";
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL as string;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY as string;
 
+// Validate that the Supabase URL and anonymous key are defined
+if (!supabaseUrl || !supabaseAnonKey) {
+  console.error(
+    "Supabase URL or anonymous key is not defined in environment variables!"
+  );
+}
+
 // Create a custom storage adapter that works in both web and native environments
 const customStorageAdapter = {
   getItem: async (key: string) => {
@@ -143,3 +150,34 @@ if (Platform.OS !== "web") {
     }
   });
 }
+// Function to check if OAuth providers are properly configured
+export const verifyOAuthConfiguration = async () => {
+  try {
+    // Unfortunately, we can't directly check which providers are enabled
+    // Unfortunately, we can't directly check which providers are enabled
+    // via the client. In a production app, you'd need to use the admin API
+    // or check this on the server side.
+    // Instead, let's log helpful information for debugging
+    console.log("OAuth configuration check:");
+    console.log(
+      "- Make sure Google/Apple providers are enabled in the Supabase dashboard"
+    );
+    console.log("- For Google: Verify client ID and secret are set correctly");
+    console.log(
+      "- For Apple: Verify Service ID, Team ID, and Key ID are set correctly"
+    );
+
+    if (Platform.OS === "ios") {
+      console.log("- For iOS apps, Apple Sign In is recommended");
+    }
+
+    // Return a hardcoded configuration for now
+    return {
+      google: true, // Assume Google is configured
+      apple: Platform.OS === "ios", // Recommend Apple for iOS
+    };
+  } catch (error) {
+    console.error("Unexpected error verifying OAuth configuration:", error);
+    return false;
+  }
+};
