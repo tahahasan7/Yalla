@@ -27,6 +27,7 @@ import { useRouter } from "expo-router";
 import { useTabPress } from "./_layout";
 // Import useAuth hook for user profile data
 import { useAuth } from "../../hooks/useAuth";
+import { supabase } from "../../lib/supabase";
 
 const { width } = Dimensions.get("window");
 
@@ -116,6 +117,7 @@ const styles = StyleSheet.create({
     // backgroundColor: "rgba(255,255,255,0.1)",
     // justifyContent: "center",
     // alignItems: "center",
+    position: "relative",
   },
   divider: {
     height: 1,
@@ -139,6 +141,17 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
   },
+  requestBadge: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    backgroundColor: "#FF3B30", // Change to red for better visibility
+    borderRadius: 4,
+    width: 8,
+    height: 8,
+    borderWidth: 1,
+    borderColor: "#FFFFFF",
+  },
 });
 
 export default function SocialScreen() {
@@ -161,6 +174,7 @@ export default function SocialScreen() {
   );
   // Add auth hook to get current user profile data
   const { user, getProfileImage } = useAuth();
+  const [friendRequests, setFriendRequests] = useState<number>(0);
 
   // New state for tracking scroll operation state
   const [scrollState, setScrollState] = useState("idle"); // 'idle', 'scrolling', 'animating'
@@ -208,6 +222,77 @@ export default function SocialScreen() {
 
   // Use the router for navigation
   const router = useRouter();
+
+  // Fetch friend requests when user changes
+  useEffect(() => {
+    if (user) {
+      console.log("Setting up friend request listener for user:", user.id);
+      fetchFriendRequestsCount();
+
+      // Subscribe to real-time updates for friend requests
+      const channel = supabase
+        .channel(`friend-requests-${user.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*", // Listen for all events
+            schema: "public",
+            table: "friendships",
+            filter: `friend_id=eq.${user.id}`,
+          },
+          (payload) => {
+            console.log("Friend request change detected:", payload);
+
+            // Check if the change is related to a pending request
+            if (
+              payload.eventType === "INSERT" &&
+              payload.new.status === "pending"
+            ) {
+              console.log("New friend request received");
+              fetchFriendRequestsCount();
+            } else if (payload.eventType === "UPDATE") {
+              console.log("Friend request status updated");
+              fetchFriendRequestsCount();
+            } else if (payload.eventType === "DELETE") {
+              console.log("Friend request deleted");
+              fetchFriendRequestsCount();
+            }
+          }
+        )
+        .subscribe();
+
+      console.log("Friend request listener set up successfully");
+
+      return () => {
+        console.log("Cleaning up friend request listener");
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [user?.id]);
+
+  // Fetch friend requests count
+  const fetchFriendRequestsCount = async () => {
+    if (!user) return;
+
+    console.log("Fetching friend request count");
+
+    try {
+      const { data, error } = await supabase
+        .from("friendships")
+        .select("id")
+        .eq("friend_id", user.id)
+        .eq("status", "pending");
+
+      if (!error && data) {
+        console.log(`Found ${data.length} pending friend requests`);
+        setFriendRequests(data.length);
+      } else if (error) {
+        console.error("Error fetching friend requests:", error);
+      }
+    } catch (err) {
+      console.error("Error fetching friend requests:", err);
+    }
+  };
 
   // Effect to handle scroll to top when tab is pressed
   useEffect(() => {
@@ -754,6 +839,9 @@ export default function SocialScreen() {
           }}
         >
           <Icon name="AddUser" size={36} color={theme.colors.text} />
+
+          {/* Friend request notification badge */}
+          {friendRequests > 0 && <View style={styles.requestBadge}></View>}
         </TouchableOpacity>
       </View>
     );

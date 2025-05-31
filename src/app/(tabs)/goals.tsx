@@ -20,6 +20,7 @@ import { GOAL_TABS } from "../../constants/goalData";
 import { DarkTheme, DefaultTheme } from "../../constants/theme";
 import { useAuth } from "../../hooks/useAuth";
 import { useColorScheme } from "../../hooks/useColorScheme";
+import { supabase } from "../../lib/supabase";
 import { goalService, GoalWithDetails } from "../../services/goalService";
 
 // Modified Tab options - rearranged with "Completed" at the end
@@ -48,6 +49,9 @@ export default function GoalsScreen() {
 
   // Ref to track last refresh time to avoid too frequent refreshes
   const lastRefreshTimeRef = useRef<number>(0);
+
+  // State for friend requests
+  const [friendRequests, setFriendRequests] = useState<number>(0);
 
   // Fetch goals from the database
   const fetchGoals = async (isRefreshing = false) => {
@@ -105,6 +109,77 @@ export default function GoalsScreen() {
       setLoading(false);
     }
   }, [user?.id, refresh]); // Re-fetch when user ID or refresh parameter changes
+
+  // Fetch friend requests when user changes
+  useEffect(() => {
+    if (user) {
+      console.log("Setting up friend request listener for user:", user.id);
+      fetchFriendRequestsCount();
+
+      // Subscribe to real-time updates for friend requests
+      const channel = supabase
+        .channel(`friend-requests-${user.id}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "*", // Listen for all events
+            schema: "public",
+            table: "friendships",
+            filter: `friend_id=eq.${user.id}`,
+          },
+          (payload) => {
+            console.log("Friend request change detected:", payload);
+
+            // Check if the change is related to a pending request
+            if (
+              payload.eventType === "INSERT" &&
+              payload.new.status === "pending"
+            ) {
+              console.log("New friend request received");
+              fetchFriendRequestsCount();
+            } else if (payload.eventType === "UPDATE") {
+              console.log("Friend request status updated");
+              fetchFriendRequestsCount();
+            } else if (payload.eventType === "DELETE") {
+              console.log("Friend request deleted");
+              fetchFriendRequestsCount();
+            }
+          }
+        )
+        .subscribe();
+
+      console.log("Friend request listener set up successfully");
+
+      return () => {
+        console.log("Cleaning up friend request listener");
+        supabase.removeChannel(channel);
+      };
+    }
+  }, [user?.id]);
+
+  // Fetch friend requests count
+  const fetchFriendRequestsCount = async () => {
+    if (!user) return;
+
+    console.log("Fetching friend request count");
+
+    try {
+      const { data, error } = await supabase
+        .from("friendships")
+        .select("id")
+        .eq("friend_id", user.id)
+        .eq("status", "pending");
+
+      if (!error && data) {
+        console.log(`Found ${data.length} pending friend requests`);
+        setFriendRequests(data.length);
+      } else if (error) {
+        console.error("Error fetching friend requests:", error);
+      }
+    } catch (err) {
+      console.error("Error fetching friend requests:", err);
+    }
+  };
 
   // Filter goals based on active tab
   const filteredGoals = React.useMemo(() => {
@@ -189,6 +264,9 @@ export default function GoalsScreen() {
             }}
           >
             <Icon name="AddUser" size={36} color={theme.colors.text} />
+
+            {/* Friend request notification badge */}
+            {friendRequests > 0 && <View style={styles.requestBadge}></View>}
           </TouchableOpacity>
         </View>
       </View>
@@ -452,6 +530,7 @@ const styles = StyleSheet.create({
   addFriendButton: {
     justifyContent: "center",
     alignItems: "center",
+    position: "relative",
   },
   addButton: {
     width: 36,
@@ -560,5 +639,16 @@ const styles = StyleSheet.create({
     color: "white",
     fontFamily: FontFamily.SemiBold,
     fontSize: 14,
+  },
+  requestBadge: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    backgroundColor: "#FF3B30", // Change to red for better visibility
+    borderRadius: 4,
+    width: 8,
+    height: 8,
+    borderWidth: 1,
+    borderColor: "#FFFFFF",
   },
 });
