@@ -25,6 +25,8 @@ import { useColorScheme } from "../../hooks/useColorScheme";
 // Import the tab press context hook
 import { useRouter } from "expo-router";
 import { useTabPress } from "./_layout";
+// Import useAuth hook for user profile data
+import { useAuth } from "../../hooks/useAuth";
 
 const { width } = Dimensions.get("window");
 
@@ -157,6 +159,8 @@ export default function SocialScreen() {
   const [viewedStories, setViewedStories] = useState<Record<string, boolean>>(
     {}
   );
+  // Add auth hook to get current user profile data
+  const { user, getProfileImage } = useAuth();
 
   // New state for tracking scroll operation state
   const [scrollState, setScrollState] = useState("idle"); // 'idle', 'scrolling', 'animating'
@@ -702,9 +706,10 @@ export default function SocialScreen() {
 
   // Create header with user profile, logo, and add user button
   const renderHeader = () => {
-    // Using POSTS[0].user.profilePic as a placeholder for the current user's profile pic
-    const userProfilePic =
-      POSTS[0]?.user?.profilePic || "https://via.placeholder.com/36";
+    // Use the authenticated user's profile pic instead of a placeholder
+    const userProfilePic = user
+      ? getProfileImage(user)
+      : "https://via.placeholder.com/36";
 
     return (
       <View

@@ -1,4 +1,5 @@
 import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -11,7 +12,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { ProfileAvatar } from "../../components/common";
+import { Icon, ProfileAvatar } from "../../components/common";
 import GoalBottomSheet from "../../components/goals/bottomSheets/GoalBottomSheet";
 import GoalCard from "../../components/goals/GoalCard";
 import { FontFamily } from "../../constants/fonts";
@@ -157,34 +158,37 @@ export default function GoalsScreen() {
           },
         ]}
       >
-        {/* Left - User Profile Pic */}
-        <TouchableOpacity onPress={() => router.push("/profile/profile-page")}>
-          <View
-            style={{
-              padding: 4,
-              borderRadius: 100,
-              borderWidth: 1.5,
-              borderColor: "#F5F378",
-              borderStyle: "dashed",
-            }}
+        {/* Left Side - Profile Pic and Today's Quote */}
+        <View style={styles.leftContainer}>
+          {/* User Profile Pic */}
+          <TouchableOpacity
+            onPress={() => router.push("/profile/profile-page")}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
-            <ProfileAvatar user={user} size={36} style={styles.profilePic} />
-          </View>
-        </TouchableOpacity>
-
-        {/* Right - Buttons */}
-        <View style={styles.buttonContainer}>
-          {/* Today's quote button */}
-          <TouchableOpacity style={styles.quoteButton}>
-            <Text style={styles.quoteButtonText}>Today's quote</Text>
+            <View style={styles.profileContainer}>
+              <ProfileAvatar user={user} size={36} style={styles.profilePic} />
+            </View>
           </TouchableOpacity>
 
-          {/* Add button */}
+          {/* Today's quote button */}
+          <TouchableOpacity style={styles.quoteButton} activeOpacity={0.7}>
+            <Text style={styles.quoteButtonText}>Today's quote</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Right Side - Add Friend Button */}
+        <View style={styles.rightContainer}>
+          {/* Add friend button */}
           <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => router.push("/create-goal")}
+            style={styles.addFriendButton}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            activeOpacity={0.7}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push("/add-user");
+            }}
           >
-            <Ionicons name="add" size={24} color="black" />
+            <Icon name="AddUser" size={36} color={theme.colors.text} />
           </TouchableOpacity>
         </View>
       </View>
@@ -284,9 +288,20 @@ export default function GoalsScreen() {
       <View style={styles.headerArea}>
         {renderHeader()}
 
-        {/* Title below header */}
+        {/* Title and Add Button container */}
         <View style={styles.titleContainer}>
-          <Text style={styles.headerTitle}>My Goals</Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.headerTitle}>My Goals</Text>
+
+            {/* Add button moved next to title */}
+            <TouchableOpacity
+              style={styles.addButton}
+              activeOpacity={0.7}
+              onPress={() => router.push("/create-goal")}
+            >
+              <Ionicons name="add" size={24} color="black" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Divider */}
@@ -366,7 +381,7 @@ const styles = StyleSheet.create({
   },
   headerArea: {
     width: "100%",
-    paddingBottom: 18,
+    paddingBottom: 16,
   },
   mainContent: {
     flex: 1,
@@ -381,38 +396,62 @@ const styles = StyleSheet.create({
     width: "100%",
     zIndex: 100,
   },
+  leftContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  rightContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
   titleContainer: {
     paddingHorizontal: 16,
-    paddingBottom: 18,
+    paddingTop: 8,
+    paddingBottom: 16,
+  },
+  titleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   headerTitle: {
     fontSize: 28,
     fontFamily: FontFamily.SemiBold,
     color: "white",
   },
+  profileContainer: {
+    padding: 4,
+    borderRadius: 100,
+    borderWidth: 1.5,
+    borderColor: "#F5F378",
+    borderStyle: "dashed",
+  },
   profilePic: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.6)",
-    borderStyle: "dashed",
-  },
-  buttonContainer: {
-    flexDirection: "row",
-    alignItems: "center",
   },
   quoteButton: {
     backgroundColor: "#0E96FF",
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
-    marginRight: 8,
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.5,
   },
   quoteButtonText: {
     color: "white",
     fontFamily: FontFamily.SemiBold,
     fontSize: 14,
+  },
+  addFriendButton: {
+    justifyContent: "center",
+    alignItems: "center",
   },
   addButton: {
     width: 36,
@@ -421,6 +460,11 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     justifyContent: "center",
     alignItems: "center",
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1.5,
   },
   divider: {
     height: 1,
