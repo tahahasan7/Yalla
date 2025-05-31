@@ -298,20 +298,43 @@ export const goalService = {
   async getFriends(
     userId: string
   ): Promise<{ data: any[]; error: PostgrestError | null }> {
-    const { data, error } = await supabase
-      .from("friendships")
-      .select(
-        `
-        friend_id,
-        friend:friend_id(id, name, username, profile_pic_url)
-      `
-      )
-      .eq("user_id", userId)
-      .eq("status", "accepted");
+    try {
+      // Get all friendships for this user (from both directions) with a single OR query
+      const { data, error } = await supabase
+        .from("friendships")
+        .select("user_id, friend_id, status")
+        .or(`user_id.eq.${userId},friend_id.eq.${userId}`)
+        .eq("status", "accepted");
 
-    return {
-      data: data?.map((item) => item.friend) || [],
-      error,
-    };
+      if (error) {
+        return { data: [], error };
+      }
+
+      if (!data || data.length === 0) {
+        return { data: [], error: null };
+      }
+
+      // Extract all friend IDs (could be in either user_id or friend_id column)
+      const friendIds = data.map((friendship) =>
+        friendship.user_id === userId
+          ? friendship.friend_id
+          : friendship.user_id
+      );
+
+      // Fetch all friend details at once
+      const { data: friendsData, error: friendsError } = await supabase
+        .from("users")
+        .select("id, name, username, profile_pic_url")
+        .in("id", friendIds);
+
+      if (friendsError) {
+        return { data: [], error: friendsError };
+      }
+
+      return { data: friendsData || [], error: null };
+    } catch (error) {
+      console.error("Error getting friends:", error);
+      return { data: [], error: error as PostgrestError };
+    }
   },
 };
