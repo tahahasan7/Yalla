@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon, ProfileAvatar } from "../../components/common";
 import GoalBottomSheet from "../../components/goals/bottomSheets/GoalBottomSheet";
+import QuoteBottomSheet from "../../components/goals/bottomSheets/QuoteBottomSheet";
 import GoalCard from "../../components/goals/GoalCard";
 import { FontFamily } from "../../constants/fonts";
 import { GOAL_TABS } from "../../constants/goalData";
@@ -40,6 +41,9 @@ export default function GoalsScreen() {
   const [selectedGoal, setSelectedGoal] = useState<GoalWithDetails | null>(
     null
   );
+
+  // State for the quote bottom sheet
+  const [quoteBottomSheetVisible, setQuoteBottomSheetVisible] = useState(false);
 
   // State for goals and loading
   const [goals, setGoals] = useState<GoalWithDetails[]>([]);
@@ -202,6 +206,17 @@ export default function GoalsScreen() {
     setBottomSheetVisible(false);
   };
 
+  // Show the quote bottom sheet
+  const showQuoteBottomSheet = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setQuoteBottomSheetVisible(true);
+  };
+
+  // Close the quote bottom sheet
+  const closeQuoteBottomSheet = () => {
+    setQuoteBottomSheetVisible(false);
+  };
+
   // Header height (including status bar)
   const HEADER_HEIGHT = 76;
   const HEADER_WITH_STATUSBAR = HEADER_HEIGHT + insets.top;
@@ -233,7 +248,11 @@ export default function GoalsScreen() {
           </TouchableOpacity>
 
           {/* Today's quote button */}
-          <TouchableOpacity style={styles.quoteButton} activeOpacity={0.7}>
+          <TouchableOpacity
+            style={styles.quoteButton}
+            activeOpacity={0.7}
+            onPress={showQuoteBottomSheet}
+          >
             <Text style={styles.quoteButtonText}>Today's quote</Text>
           </TouchableOpacity>
         </View>
@@ -298,7 +317,10 @@ export default function GoalsScreen() {
           </Text>
           <TouchableOpacity
             style={styles.createGoalButton}
-            onPress={() => router.push("/create-goal")}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              router.push("/create-goal");
+            }}
           >
             <Text style={styles.createGoalButtonText}>Create Goal</Text>
           </TouchableOpacity>
@@ -362,7 +384,10 @@ export default function GoalsScreen() {
             <TouchableOpacity
               style={styles.addButton}
               activeOpacity={0.7}
-              onPress={() => router.push("/create-goal")}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                router.push("/create-goal");
+              }}
             >
               <Ionicons name="add" size={24} color="black" />
             </TouchableOpacity>
@@ -436,6 +461,12 @@ export default function GoalsScreen() {
           onGoalUpdated={fetchGoals}
         />
       )}
+
+      {/* Quote Bottom Sheet */}
+      <QuoteBottomSheet
+        visible={quoteBottomSheetVisible}
+        onClose={closeQuoteBottomSheet}
+      />
     </View>
   );
 }

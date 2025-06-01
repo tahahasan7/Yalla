@@ -8,6 +8,7 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { CATEGORIES, Goal, GOALS } from "../../constants/goalData";
@@ -208,70 +209,81 @@ export default function SelectGoalButton({
 
       {/* Improved Goal selector dropdown */}
       {showGoalSelector && (
-        <Animated.View
-          style={[
-            styles.goalSelectorContainer,
-            {
-              opacity: goalSelectorAnim,
-              transform: [
-                {
-                  translateY: goalSelectorAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [-50, 0],
-                  }),
-                },
-              ],
-            },
-          ]}
-        >
-          <View style={styles.goalSelectorHeader}>
-            <Text style={styles.goalSelectorTitle}>Select a Goal</Text>
-            <TouchableOpacity
-              style={styles.closeButton}
-              onPress={toggleGoalSelector}
-            >
-              <Ionicons name="close" size={22} color="rgba(255,255,255,0.8)" />
-            </TouchableOpacity>
-          </View>
+        <>
+          {/* Background overlay to capture outside touches */}
+          <TouchableWithoutFeedback onPress={toggleGoalSelector}>
+            <View style={styles.goalSelectorBackdrop} />
+          </TouchableWithoutFeedback>
 
-          <Text style={styles.goalSelectorSubtitle}>
-            Choose which goal you're working towards with this photo
-          </Text>
-
-          {isLoading ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#fff" />
-              <Text style={styles.loadingText}>Loading goals...</Text>
-            </View>
-          ) : activeGoals.length > 0 ? (
-            <FlatList
-              data={activeGoals}
-              keyExtractor={(item) => item.id}
-              renderItem={({ item }) => (
-                <GoalItem
-                  goal={item}
-                  isSelected={selectedGoal?.id === item.id}
-                  onSelect={selectGoal}
+          <Animated.View
+            style={[
+              styles.goalSelectorContainer,
+              {
+                opacity: goalSelectorAnim,
+                transform: [
+                  {
+                    translateY: goalSelectorAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-50, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <View style={styles.goalSelectorHeader}>
+              <Text style={styles.goalSelectorTitle}>Select a Goal</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={toggleGoalSelector}
+              >
+                <Ionicons
+                  name="close"
+                  size={22}
+                  color="rgba(255,255,255,0.8)"
                 />
-              )}
-              showsVerticalScrollIndicator={false}
-              style={styles.goalList}
-              contentContainerStyle={styles.goalListContent}
-            />
-          ) : (
-            <View style={styles.emptyStateContainer}>
-              <Ionicons
-                name="flag-outline"
-                size={40}
-                color="rgba(255,255,255,0.6)"
-              />
-              <Text style={styles.emptyStateText}>No active goals found</Text>
-              <Text style={styles.emptyStateSubtext}>
-                Create a goal first to capture your progress
-              </Text>
+              </TouchableOpacity>
             </View>
-          )}
-        </Animated.View>
+
+            <Text style={styles.goalSelectorSubtitle}>
+              Choose which goal you're working towards with this photo
+            </Text>
+
+            {isLoading ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#fff" />
+                <Text style={styles.loadingText}>Loading goals...</Text>
+              </View>
+            ) : activeGoals.length > 0 ? (
+              <FlatList
+                data={activeGoals}
+                keyExtractor={(item) => item.id}
+                renderItem={({ item }) => (
+                  <GoalItem
+                    goal={item}
+                    isSelected={selectedGoal?.id === item.id}
+                    onSelect={selectGoal}
+                  />
+                )}
+                showsVerticalScrollIndicator={false}
+                style={styles.goalList}
+                contentContainerStyle={styles.goalListContent}
+              />
+            ) : (
+              <View style={styles.emptyStateContainer}>
+                <Ionicons
+                  name="flag-outline"
+                  size={40}
+                  color="rgba(255,255,255,0.6)"
+                />
+                <Text style={styles.emptyStateText}>No active goals found</Text>
+                <Text style={styles.emptyStateSubtext}>
+                  Create a goal first to capture your progress
+                </Text>
+              </View>
+            )}
+          </Animated.View>
+        </>
       )}
     </>
   );
@@ -307,6 +319,14 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     minWidth: 60,
+  },
+  goalSelectorBackdrop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 999,
   },
   goalSelectorContainer: {
     position: "absolute",
