@@ -82,10 +82,7 @@ export default function AddUserScreen() {
 
   // Add this function to debug the payload from real-time events
   const logFriendshipPayload = (source: string, payload: any) => {
-    console.log(`${source} Event:`, payload.eventType);
-    console.log(`${source} Table:`, payload.table);
-    if (payload.old) console.log(`${source} Old:`, JSON.stringify(payload.old));
-    if (payload.new) console.log(`${source} New:`, JSON.stringify(payload.new));
+    // Log function removed
   };
 
   // Handle close action
@@ -170,8 +167,6 @@ export default function AddUserScreen() {
   useEffect(() => {
     if (!user) return;
 
-    console.log("Setting up real-time subscriptions for user:", user.id);
-
     // Create a channel that specifically listens for friendship table changes
     const channel = supabase
       .channel(`friendship-changes-${user.id}`)
@@ -184,8 +179,6 @@ export default function AddUserScreen() {
         },
         async (payload) => {
           logFriendshipPayload("DELETE", payload);
-          console.log("A friendship was deleted - refreshing friend list");
-
           // Force an immediate refresh when a friendship is deleted
           fetchData();
         }
@@ -213,11 +206,8 @@ export default function AddUserScreen() {
                 oldRecord.friend_id === user.id));
 
           if (!involvesCurrentUser) {
-            console.log("Change does not involve current user, ignoring");
             return;
           }
-
-          console.log("Change involves current user, processing...");
 
           // Immediately fetch the latest data
           fetchData();
@@ -243,7 +233,6 @@ export default function AddUserScreen() {
 
     // Clean up subscription on unmount
     return () => {
-      console.log("Cleaning up real-time subscriptions");
       if (channel) {
         supabase.removeChannel(channel);
       }

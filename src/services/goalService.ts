@@ -405,6 +405,29 @@ export const goalService = {
         date: logData.date || new Date().toISOString().split("T")[0],
       };
 
+      // Check if the user has already logged this goal today
+      const { data: existingLog, error: checkError } = await supabase
+        .from("goal_logs")
+        .select("id")
+        .eq("goal_id", logData.goal_id)
+        .eq("user_id", logData.user_id)
+        .eq("date", logWithDate.date)
+        .single();
+
+      // If there's no error, it means we found an existing log for today
+      if (!checkError && existingLog) {
+        console.log("User has already logged this goal today");
+        return {
+          data: null,
+          error: {
+            message: "You have already logged progress for this goal today",
+            details: "",
+            hint: "",
+            code: "23505", // Using a constraint violation code
+          } as PostgrestError,
+        };
+      }
+
       // Insert the log entry
       const { data, error } = await supabase
         .from("goal_logs")

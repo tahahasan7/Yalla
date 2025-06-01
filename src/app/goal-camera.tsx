@@ -16,10 +16,13 @@ import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   BackHandler,
   Dimensions,
   Easing,
+  Image,
+  Platform,
   StatusBar,
   StyleSheet,
   Text,
@@ -30,8 +33,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { DarkTheme, DefaultTheme } from "../constants/theme";
 import { useColorScheme } from "../hooks/useColorScheme";
 // Import Goal interface and GOALS from goalData
+import * as ImagePicker from "expo-image-picker";
+import { Icon } from "../components/common";
 import SelectGoalButton from "../components/goal-camera/SelectGoalButton";
-import { Goal, GOALS } from "../constants/goalData";
+import { CATEGORIES } from "../constants/goalData";
+import { NAVBAR_HEIGHT } from "../constants/socialData";
+import { goalService } from "../services/goalService";
 
 // Get screen dimensions for responsive layout
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -49,9 +56,30 @@ export default function GoalCameraScreen() {
   const [processing, setProcessing] = useState(false);
   const [showMusicSelector, setShowMusicSelector] = useState(false);
   const [selectedMusic, setSelectedMusic] = useState<string | null>(null);
-  const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
+  const [selectedGoal, setSelectedGoal] = useState<any | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+
+  // Add state for goals fetched from database
+  const [goals, setGoals] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [showLoading, setShowLoading] = useState(false);
+
+  // Get the category icon for the currently selected goal
+  const getSelectedGoalIcon = () => {
+    if (!selectedGoal) return null;
+
+    // Find the category in CATEGORIES array
+    const category = CATEGORIES.find(
+      (cat) => cat.name === selectedGoal.category?.name
+    );
+
+    // Return the category if found, otherwise use a default icon as fallback
+    return category;
+  };
+
+  const selectedCategoryIcon = getSelectedGoalIcon();
 
   const cameraRef = useRef<any>(null);
   const insets = useSafeAreaInsets();
@@ -67,9 +95,8 @@ export default function GoalCameraScreen() {
   const cameraInitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
   );
-
-  // Filter out completed goals
-  const activeGoals = GOALS.filter((goal) => !goal.completed);
+  // Add loadingTimeoutRef to track the setTimeout for loading indicator
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Always show back button in goal-camera
   const [showBackButton, setShowBackButton] = useState(true);
@@ -92,11 +119,64 @@ export default function GoalCameraScreen() {
   const [freezeFrame, setFreezeFrame] = useState(false);
   const freezeFrameScale = useRef(new Animated.Value(1)).current;
 
+  // Fetch goals from database
+  const fetchGoals = async () => {
+    try {
+      // Start loading state
+      setIsLoading(true);
+
+      // Set a timeout to show loading indicator only if fetch takes more than 2 seconds
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+
+      loadingTimeoutRef.current = setTimeout(() => {
+        if (isMounted.current && isLoading) {
+          setShowLoading(true);
+        }
+      }, 2000);
+
+      const { data, error } = await goalService.getUserGoals();
+
+      // Clear the loading timeout
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
+
+      if (error) {
+        console.error("Error fetching goals:", error);
+        if (isMounted.current) {
+          setIsLoading(false);
+          setShowLoading(false);
+        }
+        return;
+      }
+
+      if (isMounted.current) {
+        // Filter out completed goals
+        const activeGoals = data.filter((goal) => !goal.completed);
+        setGoals(activeGoals);
+        setIsLoading(false);
+        setShowLoading(false);
+      }
+    } catch (error) {
+      console.error("Error in fetchGoals:", error);
+      if (isMounted.current) {
+        setIsLoading(false);
+        setShowLoading(false);
+      }
+    }
+  };
+
   // Use focus effect to handle all types of navigation (including gestures)
   useFocusEffect(
     useCallback(() => {
       // Reset navigation state
       setIsNavigating(false);
+
+      // Fetch goals when screen is focused
+      fetchGoals();
 
       // Initialize camera with a delay
       if (cameraPermission?.granted) {
@@ -112,6 +192,13 @@ export default function GoalCameraScreen() {
         "hardwareBackPress",
         () => {
           if (isFocused) {
+            // If in preview mode, close preview first
+            if (showPreview) {
+              closePreview();
+              return true; // Prevent default behavior
+            }
+
+            // Otherwise handle normal back press
             handleBackPress();
             return true; // Prevent default behavior
           }
@@ -137,6 +224,18 @@ export default function GoalCameraScreen() {
         if (timeoutRef.current) {
           clearTimeout(timeoutRef.current);
           timeoutRef.current = null;
+        }
+
+        // Clear loading timeout
+        if (loadingTimeoutRef.current) {
+          clearTimeout(loadingTimeoutRef.current);
+          loadingTimeoutRef.current = null;
+        }
+
+        // Reset loading state
+        if (isMounted.current) {
+          setIsLoading(false);
+          setShowLoading(false);
         }
 
         // Release camera resources
@@ -169,6 +268,17 @@ export default function GoalCameraScreen() {
 
   // Cleanup function when component unmounts
   useEffect(() => {
+    // Initial fetch of goals
+    fetchGoals();
+
+    // Safety timeout to ensure loading state doesn't get stuck
+    const safetyTimeout = setTimeout(() => {
+      if (isMounted.current && isLoading) {
+        setIsLoading(false);
+        setShowLoading(false);
+      }
+    }, 5000); // 5 seconds timeout
+
     return () => {
       // Set isMounted to false to prevent state updates after unmounting
       isMounted.current = false;
@@ -181,6 +291,12 @@ export default function GoalCameraScreen() {
       if (cameraInitTimeoutRef.current) {
         clearTimeout(cameraInitTimeoutRef.current);
       }
+
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+
+      clearTimeout(safetyTimeout);
 
       // Reset any ongoing animations
       fadeAnim.stopAnimation();
@@ -205,13 +321,54 @@ export default function GoalCameraScreen() {
   useEffect(() => {
     if (params.goalId) {
       const goalId = String(params.goalId);
-      const goalToSelect = activeGoals.find((g) => g.id === goalId);
 
-      if (goalToSelect) {
-        setSelectedGoal(goalToSelect);
+      // First check in fetched goals
+      if (goals.length > 0) {
+        const goalToSelect = goals.find((g) => g.id === goalId);
+        if (goalToSelect) {
+          setSelectedGoal(goalToSelect);
+        }
+      } else {
+        // If goals not yet fetched, fetch all goals and find the one we need
+        const fetchGoalsAndSelect = async () => {
+          try {
+            await fetchGoals(); // This will populate the goals array
+
+            // Now check if the goal is in the fetched goals
+            if (goals.length > 0) {
+              const goalToSelect = goals.find((g) => g.id === goalId);
+              if (goalToSelect) {
+                setSelectedGoal(goalToSelect);
+              }
+            }
+          } catch (error) {
+            console.error("Error fetching goal by ID:", error);
+          }
+        };
+
+        fetchGoalsAndSelect();
       }
     }
-  }, [params.goalId]);
+  }, [params.goalId, goals]);
+
+  // Handle the reset parameter from post-sharing screen
+  useEffect(() => {
+    // Check if we have a reset parameter from post-sharing
+    if (params.resetCamera === "true") {
+      // Reset to capture mode
+      setShowPreview(false);
+      setCapturedImage(null);
+      setCaption("");
+
+      // Reset camera readiness
+      setCameraReady(false);
+      setTimeout(() => {
+        if (isMounted.current) {
+          setCameraReady(true);
+        }
+      }, 50);
+    }
+  }, [params.resetCamera]);
 
   // Toggle flash mode
   const toggleFlash = () => {
@@ -303,24 +460,81 @@ export default function GoalCameraScreen() {
 
   // Pick an image from the gallery
   const pickImage = async () => {
-    if (!galleryPermission?.granted) {
-      await requestGalleryPermission();
+    // Prevent if already navigating
+    if (isNavigating) return;
+
+    // Prevent picking image if no goal is selected
+    if (!selectedGoal) {
+      // Show an alert that a goal needs to be selected first
+      Alert.alert(
+        "Select a Goal",
+        "Please select a goal before picking an image.",
+        [{ text: "OK", onPress: () => {} }],
+        { cancelable: true }
+      );
       return;
     }
 
+    // Add haptic feedback
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
     try {
-      const result = await MediaLibrary.getAssetsAsync({
-        mediaType: ["photo"],
-        first: 10,
-        sortBy: ["creationTime"],
+      // Set navigating state to prevent concurrent operations
+      setIsNavigating(true);
+
+      // Check for media library permissions
+      if (!galleryPermission?.granted) {
+        const permission = await requestGalleryPermission();
+        if (!permission.granted) {
+          if (isMounted.current) {
+            setIsNavigating(false);
+          }
+          return;
+        }
+      }
+
+      // Launch image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ["images"],
+        allowsEditing: false,
+        quality: 1,
+        allowsMultipleSelection: false,
       });
 
-      if (result.assets && result.assets.length > 0 && isMounted.current) {
-        const mostRecentImage = result.assets[0];
-        setCapturedImage(mostRecentImage.uri);
+      // Remove the deprecated 'cancelled' property to avoid warnings
+      delete (result as any).cancelled;
+
+      // Only update state if component is still mounted
+      if (!isMounted.current) return;
+
+      // If not cancelled and image selected
+      if (!result.canceled && result.assets && result.assets.length > 0) {
+        // Show loading state
+        setProcessing(true);
+
+        // Get the selected image
+        const selectedImage = result.assets[0];
+
+        // Set the captured image
+        setCapturedImage(selectedImage.uri);
+
+        // Small delay before showing preview to ensure image is loaded
+        setTimeout(() => {
+          if (isMounted.current) {
+            setShowPreview(true);
+            setProcessing(false);
+            setIsNavigating(false);
+          }
+        }, 100);
+      } else {
+        // User cancelled, reset navigating state
+        setIsNavigating(false);
       }
     } catch (error) {
       console.error("Error picking image from gallery:", error);
+      if (isMounted.current) {
+        setIsNavigating(false);
+      }
     }
   };
 
@@ -329,6 +543,18 @@ export default function GoalCameraScreen() {
     // Check for camera permissions
     if (!cameraPermission?.granted) {
       await requestCameraPermission();
+      return;
+    }
+
+    // Prevent taking photo if no goal is selected
+    if (!selectedGoal) {
+      // Show an alert that a goal needs to be selected first
+      Alert.alert(
+        "Select a Goal",
+        "Please select a goal before taking a photo.",
+        [{ text: "OK", onPress: () => {} }],
+        { cancelable: true }
+      );
       return;
     }
 
@@ -397,6 +623,13 @@ export default function GoalCameraScreen() {
               setCapturedImage(photo.uri);
               setProcessing(false);
               setFreezeFrame(false);
+
+              // Show preview after taking photo
+              setTimeout(() => {
+                if (isMounted.current) {
+                  setShowPreview(true);
+                }
+              }, 100);
             }
           } catch (e) {
             console.error("Camera error:", e);
@@ -445,8 +678,98 @@ export default function GoalCameraScreen() {
     }
   };
 
+  // Close the preview and return to camera
+  const closePreview = () => {
+    // Prevent multiple clicks or actions while already navigating
+    if (isNavigating) return;
+
+    // Mark as navigating to prevent further interactions
+    setIsNavigating(true);
+
+    // Simplify the process to reduce chances of error
+    // First clear the state directly
+    setShowPreview(false);
+    setCapturedImage(null);
+    setCaption("");
+
+    // Reset camera readiness to ensure it's properly reloaded
+    setCameraReady(false);
+    setTimeout(() => {
+      if (isMounted.current) {
+        setCameraReady(true);
+      }
+    }, 50);
+
+    // Reset navigating state after a short delay
+    setTimeout(() => {
+      if (isMounted.current) {
+        setIsNavigating(false);
+      }
+    }, 100);
+  };
+
+  // Save the image to the device
+  const saveImage = async () => {
+    if (!capturedImage || isNavigating) return;
+
+    try {
+      // Set navigating state to prevent concurrent operations
+      setIsNavigating(true);
+
+      // Check gallery permissions
+      if (!galleryPermission?.granted) {
+        const permission = await requestGalleryPermission();
+        if (!permission.granted) {
+          setIsNavigating(false);
+          return;
+        }
+      }
+
+      // Save to media library
+      await MediaLibrary.saveToLibraryAsync(capturedImage);
+
+      // Only update state if component is still mounted
+      if (isMounted.current) {
+        // Show success toast
+        setSaveToast(true);
+        setTimeout(() => {
+          if (isMounted.current) {
+            setSaveToast(false);
+            setIsNavigating(false);
+          }
+        }, 2000);
+      }
+    } catch (error) {
+      console.error("Error saving image:", error);
+      if (isMounted.current) {
+        setIsNavigating(false);
+      }
+    }
+  };
+
+  // Handle Next button action
+  const handleNext = () => {
+    // Prevent if navigating
+    if (isNavigating) return;
+
+    // Navigate to post sharing screen
+    if (capturedImage && selectedGoal) {
+      router.push({
+        pathname: "/post-sharing",
+        params: {
+          imageUri: capturedImage,
+          goalId: selectedGoal.id,
+          goalTitle: selectedGoal.title,
+          goalColor: selectedGoal.color,
+          goalIcon: selectedCategoryIcon?.icon || "flag",
+          fromGoalCamera: "true",
+        },
+      });
+    }
+  };
+
   // Handle goal selection
-  const handleGoalSelect = (goal: Goal) => {
+  const handleGoalSelect = (goal: any) => {
     setSelectedGoal(goal);
   };
 
@@ -472,6 +795,128 @@ export default function GoalCameraScreen() {
             Allow Camera Permission
           </Text>
         </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // If in preview mode, show the preview screen
+  if (showPreview && capturedImage) {
+    return (
+      <View style={styles.container}>
+        <Stack.Screen
+          options={{
+            headerShown: false,
+            contentStyle: {
+              backgroundColor: "transparent",
+            },
+            // Disable gesture navigation to prevent resource conflicts
+            gestureEnabled: false,
+          }}
+        />
+
+        <StatusBar
+          translucent
+          backgroundColor="transparent"
+          barStyle="light-content"
+          hidden={false}
+        />
+
+        {/* Background that extends behind the navbar */}
+        <View
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: NAVBAR_HEIGHT,
+            backgroundColor: "#000",
+            zIndex: 1,
+          }}
+        />
+
+        {/* Preview View - Using Animated.View for smooth transitions */}
+        <Animated.View
+          style={{
+            position: "absolute",
+            top: insets.top,
+            left: 0,
+            right: 0,
+            bottom: 50,
+            zIndex: 5,
+            borderRadius: 16,
+            overflow: "hidden",
+            margin: 4,
+            opacity: fadeAnim,
+            backgroundColor: "#000", // Add background color to prevent flicker
+          }}
+        >
+          {/* Image is rendered directly without condition */}
+          <Image
+            source={{ uri: capturedImage }}
+            style={styles.previewImage}
+            fadeDuration={0}
+          />
+
+          <View style={styles.previewOverlay}>
+            {/* Preview top bar */}
+            <View style={styles.previewTopBar}>
+              <TouchableOpacity
+                style={styles.previewCloseButton}
+                onPress={closePreview}
+                disabled={isNavigating} // Disable when navigating
+              >
+                <Ionicons name="close" size={24} color="white" />
+              </TouchableOpacity>
+
+              {/* Goal pill in top right */}
+              {selectedGoal && (
+                <View
+                  style={[
+                    styles.selectedGoalPill,
+                    { backgroundColor: selectedGoal.color },
+                  ]}
+                >
+                  <Icon
+                    name={selectedCategoryIcon?.icon || "flag"}
+                    size={16}
+                    color="#fff"
+                  />
+                  <Text style={styles.selectedGoalPillText}>
+                    {selectedGoal.title}
+                  </Text>
+                </View>
+              )}
+            </View>
+
+            {/* Bottom action button - only Next */}
+            <View style={styles.previewActions}>
+              {/* Save button */}
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={saveImage}
+                disabled={isNavigating} // Disable when navigating
+              >
+                <Ionicons name="download-outline" size={22} color="white" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={styles.nextButton}
+                onPress={handleNext}
+                disabled={isNavigating} // Disable when navigating
+              >
+                <Text style={styles.nextButtonText}>Next</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* Save toast notification */}
+          {saveToast && (
+            <View style={styles.saveToast}>
+              <Ionicons name="checkmark-circle" size={20} color="white" />
+              <Text style={styles.saveToastText}>Saved to gallery</Text>
+            </View>
+          )}
+        </Animated.View>
       </View>
     );
   }
@@ -547,10 +992,13 @@ export default function GoalCameraScreen() {
                   </TouchableOpacity>
                 )}
 
-                {/* Use the new SelectGoalButton component */}
+                {/* Use the new SelectGoalButton component with the fetched goals */}
                 <SelectGoalButton
                   selectedGoal={selectedGoal}
                   onSelectGoal={handleGoalSelect}
+                  goals={goals}
+                  isLoading={showLoading}
+                  onRefresh={() => fetchGoals()}
                 />
               </View>
 
@@ -633,7 +1081,7 @@ export default function GoalCameraScreen() {
                     style={[
                       styles.captureInner,
                       {
-                        backgroundColor: theme.colors.primary,
+                        backgroundColor: "#fff",
                         transform: [{ scale: captureAnimation }],
                       },
                     ]}
@@ -762,6 +1210,107 @@ const styles = StyleSheet.create({
   controlButtonsContainer: {
     flexDirection: "column",
     justifyContent: "flex-start",
+    alignItems: "center",
+  },
+
+  // Preview screen styles
+  previewImage: {
+    flex: 1,
+    width: "100%",
+    height: "100%",
+  },
+  previewOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(0,0,0,0.1)",
+    justifyContent: "space-between",
+  },
+  previewTopBar: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  previewCloseButton: {
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  selectedGoalPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 100,
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    height: 44,
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+  },
+  selectedGoalPillText: {
+    color: "white",
+    fontSize: 14,
+    fontWeight: "600",
+    marginLeft: 8,
+  },
+  previewActions: {
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 1000,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  nextButton: {
+    backgroundColor: "#fff",
+    borderRadius: 100,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    justifyContent: "center",
+    alignItems: "center",
+    height: 45,
+  },
+  nextButtonText: {
+    color: "black",
+    fontSize: 16,
+    fontWeight: "600",
+  },
+  saveToast: {
+    position: "absolute",
+    top: Platform.OS === "ios" ? 100 : 80,
+    alignSelf: "center",
+    backgroundColor: "rgba(0, 0, 0, 0.85)",
+    borderRadius: 20,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    flexDirection: "row",
+    alignItems: "center",
+    zIndex: 9999,
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
+  },
+  saveToastText: {
+    color: "white",
+    fontSize: 15,
+    fontWeight: "600",
+    marginLeft: 8,
+    letterSpacing: 0.2,
+  },
+  saveButton: {
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    borderRadius: 20,
+    padding: 10,
+    width: 40,
+    height: 40,
+    justifyContent: "center",
     alignItems: "center",
   },
 });

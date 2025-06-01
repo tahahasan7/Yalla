@@ -76,22 +76,29 @@ export default function PostSharingScreen() {
           text: "Discard",
           style: "destructive",
           onPress: () => {
-            // Navigate back to camera in capture mode, not preview mode
-            if (params.fromGoalDetail === "true" && params.goalId) {
-              // If coming from goal detail, go back to goal camera with the right goal
-              router.replace({
-                pathname: "/goal-camera",
-                params: {
-                  goalId: params.goalId,
-                  goalTitle: params.goalTitle,
-                  goalColor: params.goalColor,
-                  goalIcon: params.goalIcon,
-                  fromGoalDetail: "true",
-                  resetCamera: "true", // Signal to reset the camera to capture mode
-                },
-              });
+            // Check if we came from goal-camera or regular camera
+            const fromGoalCamera = params.fromGoalCamera === "true";
+
+            if (fromGoalCamera) {
+              // For goal-camera, use back() to properly "close" this screen
+              // and then navigate back to the original goal-camera screen
+              router.back();
+
+              // Add a small delay to ensure the screen is properly closed
+              setTimeout(() => {
+                router.replace({
+                  pathname: "/goal-camera",
+                  params: {
+                    goalId: params.goalId,
+                    goalTitle: params.goalTitle,
+                    goalColor: params.goalColor,
+                    goalIcon: params.goalIcon,
+                    resetCamera: "true", // Signal to reset the camera to capture mode
+                  },
+                });
+              }, 50);
             } else {
-              // Otherwise go back to the regular camera
+              // Navigate back to regular camera
               router.replace({
                 pathname: "/(tabs)/camera",
                 params: {
@@ -233,10 +240,22 @@ export default function PostSharingScreen() {
 
       if (error) {
         console.error("Error posting goal log:", error);
-        Alert.alert(
-          "Error",
-          "There was a problem posting your update. Please try again."
-        );
+
+        // Check if this is the "already logged today" error
+        if (
+          error.message &&
+          error.message.includes("already logged progress for this goal today")
+        ) {
+          Alert.alert(
+            "Already Logged Today",
+            "You've already logged progress for this goal today. Come back tomorrow!"
+          );
+        } else {
+          Alert.alert(
+            "Error",
+            "There was a problem posting your update. Please try again."
+          );
+        }
         return;
       }
 

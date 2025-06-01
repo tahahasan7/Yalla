@@ -16,8 +16,6 @@ export const friendService = {
     userId: string
   ): Promise<{ data: Friend[]; error: PostgrestError | null }> {
     try {
-      console.log(`Getting friends for user ${userId}`);
-
       // Get all friendships for this user (from both directions) with a single OR query
       const { data: friendships, error } = await supabase
         .from("friendships")
@@ -31,11 +29,8 @@ export const friendService = {
       }
 
       if (!friendships || friendships.length === 0) {
-        console.log("No friends found");
         return { data: [], error: null };
       }
-
-      console.log(`Found ${friendships.length} friendship entries`);
 
       // Extract all friend IDs (could be in either user_id or friend_id column)
       const friendIds = friendships.map((friendship) =>
@@ -47,8 +42,6 @@ export const friendService = {
       // Remove duplicate IDs (in case there are any)
       const uniqueFriendIds = [...new Set(friendIds)];
 
-      console.log(`Found ${uniqueFriendIds.length} unique friend IDs`);
-
       // Fetch all friend details at once
       const { data: friendsData, error: friendsError } = await supabase
         .from("users")
@@ -59,8 +52,6 @@ export const friendService = {
         console.error("Error fetching friend details:", friendsError);
         return { data: [], error: friendsError };
       }
-
-      console.log(`Retrieved ${friendsData?.length || 0} friend profiles`);
 
       return { data: friendsData as Friend[], error: null };
     } catch (error) {

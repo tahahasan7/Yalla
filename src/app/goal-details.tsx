@@ -145,6 +145,7 @@ export default function GoalDetailsScreen() {
           return { userId, userData };
         } catch (error) {
           console.error(`Error fetching user ${userId}:`, error);
+          // Return a fallback user object instead of failing
           return {
             userId,
             userData: { id: userId, name: "User" },
@@ -152,20 +153,26 @@ export default function GoalDetailsScreen() {
         }
       });
 
-      const results = await Promise.all(userPromises);
+      // Handle potential Promise.all failure
+      try {
+        const results = await Promise.all(userPromises);
 
-      // Build user cache
-      const userCache: { [key: string]: any } = {};
-      results.forEach(({ userId, userData }) => {
-        if (userData) {
-          userCache[userId] = userData;
-        }
-      });
+        // Build user cache
+        const userCache: { [key: string]: any } = {};
+        results.forEach(({ userId, userData }) => {
+          if (userData) {
+            userCache[userId] = userData;
+          }
+        });
 
-      setUsersForGoal(userCache);
-      setIsUserDataLoaded(true);
+        setUsersForGoal(userCache);
+      } catch (error) {
+        console.error("Error resolving user promises:", error);
+      }
     } catch (error) {
       console.error("Error prefetching user data:", error);
+    } finally {
+      // Always mark user data as loaded, even if there were errors
       setIsUserDataLoaded(true);
     }
   }, []);
@@ -177,81 +184,93 @@ export default function GoalDetailsScreen() {
       setIsUserDataLoaded(false);
 
       if (goalId) {
-        const { data } = await goalService.getGoalLogs(goalId);
-        setGoalLogs(data);
+        try {
+          const { data, error } = await goalService.getGoalLogs(goalId);
 
-        // Prefetch user data for all logs
-        await prefetchUserData(data);
+          if (error) {
+            console.error("Error fetching goal logs:", error);
+            setIsLoading(false);
+            return;
+          }
 
-        // Process data for both views at once to avoid reprocessing on toggle
-        if (data.length > 0) {
-          // Group timeline items by month
-          const groupedByMonth: Record<string, GoalLogItem[]> = data.reduce(
-            (groups: Record<string, GoalLogItem[]>, item: GoalLogItem) => {
-              const month = item.month || "";
-              if (!groups[month]) {
-                groups[month] = [];
+          setGoalLogs(data);
+
+          // Prefetch user data for all logs
+          await prefetchUserData(data);
+
+          // Process data for both views at once to avoid reprocessing on toggle
+          if (data.length > 0) {
+            // Group timeline items by month
+            const groupedByMonth: Record<string, GoalLogItem[]> = data.reduce(
+              (groups: Record<string, GoalLogItem[]>, item: GoalLogItem) => {
+                const month = item.month || "";
+                if (!groups[month]) {
+                  groups[month] = [];
+                }
+                groups[month].push(item);
+                return groups;
+              },
+              {}
+            );
+
+            // Sort months in reverse chronological order (latest first)
+            const sortedMonths = Object.entries(groupedByMonth).sort((a, b) => {
+              // Extract year from month string (e.g., "December 2025" -> 2025)
+              const yearA = parseInt(a[0].split(" ")[1]);
+              const yearB = parseInt(b[0].split(" ")[1]);
+
+              // Extract month from month string (e.g., "December 2025" -> December)
+              const monthA = a[0].split(" ")[0];
+              const monthB = b[0].split(" ")[0];
+
+              // Convert month names to numbers for comparison
+              const monthNames = [
+                "January",
+                "February",
+                "March",
+                "April",
+                "May",
+                "June",
+                "July",
+                "August",
+                "September",
+                "October",
+                "November",
+                "December",
+              ];
+              const monthNumA = monthNames.indexOf(monthA);
+              const monthNumB = monthNames.indexOf(monthB);
+
+              // Compare years first, then months
+              if (yearA !== yearB) {
+                return yearB - yearA; // Latest year first
               }
-              groups[month].push(item);
-              return groups;
-            },
-            {}
-          );
-
-          // Sort months in reverse chronological order (latest first)
-          const sortedMonths = Object.entries(groupedByMonth).sort((a, b) => {
-            // Extract year from month string (e.g., "December 2025" -> 2025)
-            const yearA = parseInt(a[0].split(" ")[1]);
-            const yearB = parseInt(b[0].split(" ")[1]);
-
-            // Extract month from month string (e.g., "December 2025" -> December)
-            const monthA = a[0].split(" ")[0];
-            const monthB = b[0].split(" ")[0];
-
-            // Convert month names to numbers for comparison
-            const monthNames = [
-              "January",
-              "February",
-              "March",
-              "April",
-              "May",
-              "June",
-              "July",
-              "August",
-              "September",
-              "October",
-              "November",
-              "December",
-            ];
-            const monthNumA = monthNames.indexOf(monthA);
-            const monthNumB = monthNames.indexOf(monthB);
-
-            // Compare years first, then months
-            if (yearA !== yearB) {
-              return yearB - yearA; // Latest year first
-            }
-            return monthNumB - monthNumA; // Latest month first
-          });
-
-          // Sort days within each month in reverse chronological order (latest first)
-          const sortedMonthsWithSortedDays: [string, GoalLogItem[]][] =
-            sortedMonths.map(([month, items]) => {
-              // Sort items by created_at timestamp in reverse chronological order
-              const sortedItems = [...items].sort(
-                (a, b) =>
-                  new Date(b.created_at).getTime() -
-                  new Date(a.created_at).getTime()
-              );
-              return [month, sortedItems] as [string, GoalLogItem[]];
+              return monthNumB - monthNumA; // Latest month first
             });
 
-          // Store the processed data
-          setProcessedData({
-            sortedMonths,
-            sortedMonthsWithSortedDays,
-          });
+            // Sort days within each month in reverse chronological order (latest first)
+            const sortedMonthsWithSortedDays: [string, GoalLogItem[]][] =
+              sortedMonths.map(([month, items]) => {
+                // Sort items by created_at timestamp in reverse chronological order
+                const sortedItems = [...items].sort(
+                  (a, b) =>
+                    new Date(b.created_at).getTime() -
+                    new Date(a.created_at).getTime()
+                );
+                return [month, sortedItems] as [string, GoalLogItem[]];
+              });
+
+            // Store the processed data
+            setProcessedData({
+              sortedMonths,
+              sortedMonthsWithSortedDays,
+            });
+          }
+        } catch (error) {
+          console.error("Error fetching goal logs:", error);
+        } finally {
+          setIsLoading(false);
         }
-        setIsLoading(false);
       }
     };
 
@@ -386,10 +405,18 @@ export default function GoalDetailsScreen() {
     const fetchFlowState = async () => {
       if (goalId && user?.id) {
         try {
-          const { data } = await goalService.getGoalFlowState(goalId, user.id);
+          const { data, error } = await goalService.getGoalFlowState(
+            goalId,
+            user.id
+          );
+          if (error) {
+            console.error("Error fetching flow state:", error);
+            return;
+          }
           // We could update the goal's flow state here if needed
         } catch (err) {
-          console.error("Error fetching flow state:", err);
+          console.error("Network error fetching flow state:", err);
+          // Just continue with the current flow state
         }
       }
     };

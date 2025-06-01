@@ -27,7 +27,7 @@ export default function RootLayout() {
   // Verify OAuth configuration on app startup
   useEffect(() => {
     verifyOAuthConfiguration().then((result) => {
-      console.log("OAuth configuration verified:", result);
+      // OAuth configuration verified
     });
   }, []);
 

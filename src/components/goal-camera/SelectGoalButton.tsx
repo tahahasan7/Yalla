@@ -1,6 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import React, { useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
   FlatList,
@@ -22,17 +23,23 @@ const GoalItem = ({
   isSelected,
   onSelect,
 }: {
-  goal: Goal;
+  goal: any; // Change to any to avoid type issues with database goals
   isSelected: boolean;
-  onSelect: (goal: Goal) => void;
+  onSelect: (goal: any) => void;
 }) => {
   // Get the category icon for the goal
   const getCategoryIcon = () => {
+    // Database goals might have category as an object with name property
+    const categoryName =
+      typeof goal.category === "object" && goal.category
+        ? goal.category.name
+        : goal.category;
+
     // Find the category in CATEGORIES array
-    const category = CATEGORIES.find((cat) => cat.name === goal.category);
+    const category = CATEGORIES.find((cat) => cat.name === categoryName);
 
     // If category found, return the icon info, otherwise return a default
-    return category || { name: "Default", icon: goal.icon };
+    return category || { name: "Default", icon: goal.icon || "Task" };
   };
 
   const categoryIcon = getCategoryIcon();
@@ -47,7 +54,7 @@ const GoalItem = ({
       activeOpacity={0.7}
     >
       <View style={[styles.goalIconContainer, { backgroundColor: goal.color }]}>
-        <Icon name={categoryIcon.icon} size={18} color="#fff" />
+        <Icon name={categoryIcon.icon || "Task"} size={18} color="#fff" />
       </View>
 
       <View style={styles.goalInfo}>
@@ -56,31 +63,40 @@ const GoalItem = ({
           <Text style={styles.goalFrequency}>{goal.frequency}</Text>
         </View>
       </View>
-      <FlowStateIcon flowState={goal.flowState} size={22} />
+      <FlowStateIcon flowState={goal.flowState || "still"} size={22} />
     </TouchableOpacity>
   );
 };
 
 interface SelectGoalButtonProps {
-  selectedGoal: Goal | null;
-  onSelectGoal: (goal: Goal) => void;
+  selectedGoal: any | null;
+  onSelectGoal: (goal: any) => void;
+  goals?: any[]; // Database goals
+  isLoading?: boolean; // Loading state
+  onRefresh?: () => void; // Refresh function
 }
 
 export default function SelectGoalButton({
   selectedGoal,
   onSelectGoal,
+  goals,
+  isLoading = false,
+  onRefresh,
 }: SelectGoalButtonProps) {
   // State for goal selector
   const [showGoalSelector, setShowGoalSelector] = useState(false);
   const goalSelectorAnim = useRef(new Animated.Value(0)).current;
   const goalSelectorHeight = useRef(new Animated.Value(0)).current;
 
-  // Filter out completed goals
-  const activeGoals = GOALS.filter((goal) => !goal.completed);
+  // Use provided goals if available, otherwise use GOALS from constants
+  const activeGoals = goals ? goals : GOALS.filter((goal) => !goal.completed);
 
   // Toggle goal selector
   function toggleGoalSelector() {
-    // Haptic feedback removed
+    // If we're showing the selector and onRefresh is provided, call it
+    if (!showGoalSelector && onRefresh) {
+      onRefresh();
+    }
 
     // If goal selector is currently visible, hide it
     if (showGoalSelector) {
@@ -127,13 +143,17 @@ export default function SelectGoalButton({
   const getSelectedGoalIcon = () => {
     if (!selectedGoal) return null;
 
+    // Handle database goals where category might be an object
+    const categoryName =
+      typeof selectedGoal.category === "object" && selectedGoal.category
+        ? selectedGoal.category.name
+        : selectedGoal.category;
+
     // Find the category in CATEGORIES array
-    const category = CATEGORIES.find(
-      (cat) => cat.name === selectedGoal.category
-    );
+    const category = CATEGORIES.find((cat) => cat.name === categoryName);
 
     // Return the category if found, otherwise use the goal's icon as fallback
-    return category;
+    return category || { name: "Default", icon: selectedGoal.icon || "Task" };
   };
 
   const selectedCategoryIcon = getSelectedGoalIcon();
@@ -152,7 +172,11 @@ export default function SelectGoalButton({
         {selectedGoal ? (
           <React.Fragment>
             <View style={styles.selectedIndicator}>
-              <Icon name={selectedGoal.icon} size={18} color="#fff" />
+              <Icon
+                name={selectedCategoryIcon?.icon || selectedGoal.icon || "Task"}
+                size={18}
+                color="#fff"
+              />
               <View style={{ backgroundColor: "transparent", gap: 10 }}>
                 <Text
                   style={styles.selectedGoalText}
@@ -214,20 +238,39 @@ export default function SelectGoalButton({
             Choose which goal you're working towards with this photo
           </Text>
 
-          <FlatList
-            data={activeGoals}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <GoalItem
-                goal={item}
-                isSelected={selectedGoal?.id === item.id}
-                onSelect={selectGoal}
+          {isLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#fff" />
+              <Text style={styles.loadingText}>Loading goals...</Text>
+            </View>
+          ) : activeGoals.length > 0 ? (
+            <FlatList
+              data={activeGoals}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <GoalItem
+                  goal={item}
+                  isSelected={selectedGoal?.id === item.id}
+                  onSelect={selectGoal}
+                />
+              )}
+              showsVerticalScrollIndicator={false}
+              style={styles.goalList}
+              contentContainerStyle={styles.goalListContent}
+            />
+          ) : (
+            <View style={styles.emptyStateContainer}>
+              <Ionicons
+                name="flag-outline"
+                size={40}
+                color="rgba(255,255,255,0.6)"
               />
-            )}
-            showsVerticalScrollIndicator={false}
-            style={styles.goalList}
-            contentContainerStyle={styles.goalListContent}
-          />
+              <Text style={styles.emptyStateText}>No active goals found</Text>
+              <Text style={styles.emptyStateSubtext}>
+                Create a goal first to capture your progress
+              </Text>
+            </View>
+          )}
         </Animated.View>
       )}
     </>
@@ -253,11 +296,16 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     marginHorizontal: 8,
   },
+  selectedIndicator: {
+    flexDirection: "row",
+    gap: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   selectedGoalText: {
     color: "#fff",
     fontSize: 14,
     fontWeight: "700",
-
     minWidth: 60,
   },
   goalSelectorContainer: {
@@ -357,16 +405,40 @@ const styles = StyleSheet.create({
     color: "rgba(255, 255, 255, 0.7)",
     fontSize: 13,
   },
-
   flowStateText: {
     fontSize: 12,
     fontWeight: "600",
     marginLeft: 4,
   },
-  selectedIndicator: {
-    flexDirection: "row",
-    gap: 10,
-    alignItems: "center",
+  loadingContainer: {
+    padding: 40,
     justifyContent: "center",
+    alignItems: "center",
+    minHeight: 200,
+  },
+  loadingText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+    marginTop: 16,
+  },
+  emptyStateContainer: {
+    padding: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    minHeight: 200,
+  },
+  emptyStateText: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "600",
+    marginTop: 16,
+  },
+  emptyStateSubtext: {
+    color: "rgba(255, 255, 255, 0.7)",
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: 8,
+    maxWidth: 250,
   },
 });

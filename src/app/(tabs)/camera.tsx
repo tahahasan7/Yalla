@@ -189,7 +189,7 @@ export default function GoalCameraScreen() {
       }
 
       if (error) {
-        console.error("Error fetching goals:", error);
+        // Error fetching goals
         if (isMounted.current) {
           setIsLoading(false);
           setShowLoading(false);
@@ -205,7 +205,7 @@ export default function GoalCameraScreen() {
         setShowLoading(false);
       }
     } catch (error) {
-      console.error("Error in fetchGoals:", error);
+      // Error in fetchGoals
       if (isMounted.current) {
         setIsLoading(false);
         setShowLoading(false);
@@ -432,11 +432,14 @@ export default function GoalCameraScreen() {
 
       // Launch image picker
       const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        mediaTypes: ["images"],
         allowsEditing: false,
         quality: 1,
         allowsMultipleSelection: false,
       });
+
+      // Remove the deprecated 'cancelled' property to avoid warnings
+      delete (result as any).cancelled;
 
       // Only update state if component is still mounted
       if (!isMounted.current) return;
@@ -465,7 +468,7 @@ export default function GoalCameraScreen() {
         setIsNavigating(false);
       }
     } catch (error) {
-      console.error("Error picking image:", error);
+      // Error picking image
       if (isMounted.current) {
         setIsNavigating(false);
       }
@@ -539,7 +542,7 @@ export default function GoalCameraScreen() {
             }, 100);
           }
         } catch (error) {
-          console.error("Error taking photo:", error);
+          // Error taking photo
           if (isMounted.current) {
             setFreezeFrame(false);
             setProcessing(false);
@@ -548,7 +551,7 @@ export default function GoalCameraScreen() {
         }
       }
     } catch (error) {
-      console.error("Error taking photo:", error);
+      // Error taking photo
       if (isMounted.current) {
         setFreezeFrame(false);
         setProcessing(false);
@@ -619,7 +622,7 @@ export default function GoalCameraScreen() {
         }, 2000);
       }
     } catch (error) {
-      console.error("Error saving image:", error);
+      // Error saving image
       if (isMounted.current) {
         setIsNavigating(false);
       }
@@ -641,6 +644,7 @@ export default function GoalCameraScreen() {
           goalTitle: selectedGoal.title,
           goalColor: selectedGoal.color,
           goalIcon: selectedCategoryIcon?.icon || "flag-outline",
+          fromGoalCamera: "false",
         },
       });
     }
@@ -655,18 +659,13 @@ export default function GoalCameraScreen() {
       setIsNavigating(true);
 
       // This would be your API call to post the image
-      console.log("Posting image", {
-        imageUri: capturedImage,
-        goalId: selectedGoal.id,
-        goalTitle: selectedGoal.title,
-      });
 
       // After successful post, close preview and reset
       closePreview();
 
       // Optional: navigate to another screen or show success message
     } catch (error) {
-      console.error("Error posting image:", error);
+      // Error posting image
       if (isMounted.current) {
         setIsNavigating(false);
       }
@@ -1064,7 +1063,7 @@ export default function GoalCameraScreen() {
                     style={styles.goalList}
                     contentContainerStyle={styles.goalListContent}
                   />
-                ) : (
+                ) : !isLoading ? (
                   <View style={styles.emptyStateContainer}>
                     <Ionicons
                       name="flag-outline"
@@ -1085,6 +1084,11 @@ export default function GoalCameraScreen() {
                         Create Goal
                       </Text>
                     </TouchableOpacity>
+                  </View>
+                ) : (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#fff" />
+                    <Text style={styles.loadingText}>Loading goals...</Text>
                   </View>
                 )}
               </Animated.View>

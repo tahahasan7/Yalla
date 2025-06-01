@@ -93,7 +93,11 @@ const FlowStateIcon = ({ flowState, size = 20, color }: CombinedProps) => {
       ]}
     >
       <Icon
-        name={flowState.charAt(0).toUpperCase() + flowState.slice(1)}
+        name={
+          (flowState &&
+            flowState.charAt(0).toUpperCase() + flowState.slice(1)) ||
+          "Still"
+        }
         size={size}
         color={iconColor}
       />

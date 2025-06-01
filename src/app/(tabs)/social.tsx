@@ -226,7 +226,6 @@ export default function SocialScreen() {
   // Fetch friend requests when user changes
   useEffect(() => {
     if (user) {
-      console.log("Setting up friend request listener for user:", user.id);
       fetchFriendRequestsCount();
 
       // Subscribe to real-time updates for friend requests
@@ -241,30 +240,22 @@ export default function SocialScreen() {
             filter: `friend_id=eq.${user.id}`,
           },
           (payload) => {
-            console.log("Friend request change detected:", payload);
-
             // Check if the change is related to a pending request
             if (
               payload.eventType === "INSERT" &&
               payload.new.status === "pending"
             ) {
-              console.log("New friend request received");
               fetchFriendRequestsCount();
             } else if (payload.eventType === "UPDATE") {
-              console.log("Friend request status updated");
               fetchFriendRequestsCount();
             } else if (payload.eventType === "DELETE") {
-              console.log("Friend request deleted");
               fetchFriendRequestsCount();
             }
           }
         )
         .subscribe();
 
-      console.log("Friend request listener set up successfully");
-
       return () => {
-        console.log("Cleaning up friend request listener");
         supabase.removeChannel(channel);
       };
     }
@@ -274,8 +265,6 @@ export default function SocialScreen() {
   const fetchFriendRequestsCount = async () => {
     if (!user) return;
 
-    console.log("Fetching friend request count");
-
     try {
       const { data, error } = await supabase
         .from("friendships")
@@ -284,7 +273,6 @@ export default function SocialScreen() {
         .eq("status", "pending");
 
       if (!error && data) {
-        console.log(`Found ${data.length} pending friend requests`);
         setFriendRequests(data.length);
       } else if (error) {
         console.error("Error fetching friend requests:", error);

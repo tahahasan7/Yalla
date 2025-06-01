@@ -158,19 +158,6 @@ export const verifyOAuthConfiguration = async () => {
     // via the client. In a production app, you'd need to use the admin API
     // or check this on the server side.
     // Instead, let's log helpful information for debugging
-    console.log("OAuth configuration check:");
-    console.log(
-      "- Make sure Google/Apple providers are enabled in the Supabase dashboard"
-    );
-    console.log("- For Google: Verify client ID and secret are set correctly");
-    console.log(
-      "- For Apple: Verify Service ID, Team ID, and Key ID are set correctly"
-    );
-
-    if (Platform.OS === "ios") {
-      console.log("- For iOS apps, Apple Sign In is recommended");
-    }
-
     // Return a hardcoded configuration for now
     return {
       google: true, // Assume Google is configured

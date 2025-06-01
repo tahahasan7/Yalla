@@ -61,6 +61,7 @@ export default function GoalsScreen() {
     } else {
       setLoading(true);
     }
+    setError(null);
 
     try {
       const { data, error } = await goalService.getUserGoals();
@@ -89,31 +90,28 @@ export default function GoalsScreen() {
 
   // Fetch goals when user changes or refresh parameter changes
   useEffect(() => {
-    if (user) {
-      // Simple check to prevent refresh spam
-      const now = Date.now();
-      const lastRefresh = lastRefreshTimeRef.current;
-      const MIN_INTERVAL = 1000; // 1 second minimum between refreshes
-
-      if (now - lastRefresh < MIN_INTERVAL) {
-        console.log("Skipping refresh, too soon");
-        return;
-      }
-
-      console.log("Refreshing goals list");
-      lastRefreshTimeRef.current = now;
-      fetchGoals();
-    } else {
+    if (!user) {
       // Clear goals if no user is logged in
       setGoals([]);
       setLoading(false);
+      return;
     }
+
+    // Simple check to prevent refresh spam
+    const now = Date.now();
+    const lastRefresh = lastRefreshTimeRef.current;
+    const MIN_INTERVAL = 1000; // 1 second minimum between refreshes
+
+    if (now - lastRefresh < MIN_INTERVAL) {
+      return;
+    }
+
+    fetchGoals();
   }, [user?.id, refresh]); // Re-fetch when user ID or refresh parameter changes
 
   // Fetch friend requests when user changes
   useEffect(() => {
     if (user) {
-      console.log("Setting up friend request listener for user:", user.id);
       fetchFriendRequestsCount();
 
       // Subscribe to real-time updates for friend requests
@@ -128,30 +126,22 @@ export default function GoalsScreen() {
             filter: `friend_id=eq.${user.id}`,
           },
           (payload) => {
-            console.log("Friend request change detected:", payload);
-
             // Check if the change is related to a pending request
             if (
               payload.eventType === "INSERT" &&
               payload.new.status === "pending"
             ) {
-              console.log("New friend request received");
               fetchFriendRequestsCount();
             } else if (payload.eventType === "UPDATE") {
-              console.log("Friend request status updated");
               fetchFriendRequestsCount();
             } else if (payload.eventType === "DELETE") {
-              console.log("Friend request deleted");
               fetchFriendRequestsCount();
             }
           }
         )
         .subscribe();
 
-      console.log("Friend request listener set up successfully");
-
       return () => {
-        console.log("Cleaning up friend request listener");
         supabase.removeChannel(channel);
       };
     }
@@ -161,8 +151,6 @@ export default function GoalsScreen() {
   const fetchFriendRequestsCount = async () => {
     if (!user) return;
 
-    console.log("Fetching friend request count");
-
     try {
       const { data, error } = await supabase
         .from("friendships")
@@ -171,7 +159,6 @@ export default function GoalsScreen() {
         .eq("status", "pending");
 
       if (!error && data) {
-        console.log(`Found ${data.length} pending friend requests`);
         setFriendRequests(data.length);
       } else if (error) {
         console.error("Error fetching friend requests:", error);
@@ -303,7 +290,7 @@ export default function GoalsScreen() {
       );
     }
 
-    if (goals.length === 0) {
+    if (goals.length === 0 && !loading) {
       return (
         <View style={styles.centeredContainer}>
           <Text style={styles.messageText}>
