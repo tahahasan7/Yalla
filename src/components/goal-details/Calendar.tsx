@@ -1,21 +1,61 @@
 import React from "react";
 import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { FontFamily } from "../../constants/fonts";
-import { Log } from "../../constants/goalData";
+import { GoalLogItem } from "../../services/goalService";
 
 interface CalendarProps {
-  sortedMonths: [string, Log[]][];
-  onDayPress: (day: Log | Log[], dayKey: string) => void;
+  sortedMonths?: [string, GoalLogItem[]][];
+  goalLogs: GoalLogItem[];
+  onDayPress: (day: GoalLogItem | GoalLogItem[], dayKey: string) => void;
   registerDayRef: (key: string, ref: View | null) => void;
   isGroupGoal?: boolean;
 }
 
 const Calendar: React.FC<CalendarProps> = ({
   sortedMonths,
+  goalLogs,
   onDayPress,
   registerDayRef,
   isGroupGoal = false,
 }) => {
+  // Group logs by month
+  const groupLogsByMonth = (logs: GoalLogItem[]) => {
+    const monthsMap: Record<string, GoalLogItem[]> = {};
+
+    logs.forEach((log) => {
+      if (!log.date) return;
+
+      const date = new Date(log.date);
+      const monthNames = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+      ];
+      const monthStr = `${monthNames[date.getMonth()]} ${date.getFullYear()}`;
+
+      if (!monthsMap[monthStr]) {
+        monthsMap[monthStr] = [];
+      }
+
+      monthsMap[monthStr].push(log);
+    });
+
+    // Convert to array of [month, logs] pairs
+    return Object.entries(monthsMap);
+  };
+
+  // Use either provided sortedMonths or generate from goalLogs
+  const monthsToRender = sortedMonths || groupLogsByMonth(goalLogs);
+
   const getMonthDays = (year: number, month: number): number =>
     new Date(year, month + 1, 0).getDate();
 
@@ -48,13 +88,13 @@ const Calendar: React.FC<CalendarProps> = ({
 
   const generateCalendarData = (
     monthString: string,
-    items: Log[]
-  ): { days: (Log[] | null)[]; dayLabels: string[] } => {
+    items: GoalLogItem[]
+  ): { days: (GoalLogItem[] | null)[]; dayLabels: string[] } => {
     const { month, year } = parseMonthString(monthString);
     const totalDays = getMonthDays(year, month);
     const firstDay = getFirstDayOfMonth(year, month);
 
-    const days: (Log[] | null)[] = Array(totalDays + 1).fill(null);
+    const days: (GoalLogItem[] | null)[] = Array(totalDays + 1).fill(null);
 
     items.forEach((item) => {
       const date = new Date(item.date);
@@ -71,7 +111,7 @@ const Calendar: React.FC<CalendarProps> = ({
 
   return (
     <View style={styles.calendarContainer}>
-      {sortedMonths.map(([month, items]) => {
+      {monthsToRender.map(([month, items]) => {
         const { days, dayLabels } = generateCalendarData(month, items);
         const { month: monthNum, year } = parseMonthString(month);
         const firstDay = getFirstDayOfMonth(year, monthNum);
@@ -126,7 +166,7 @@ const Calendar: React.FC<CalendarProps> = ({
                         {dayLogs ? (
                           <View style={styles.calendarDayWithImage}>
                             <Image
-                              source={{ uri: dayLogs[0].imageUrl }}
+                              source={{ uri: dayLogs[0].image_url }}
                               style={styles.calendarDayImage}
                               resizeMode="cover"
                             />
@@ -136,13 +176,11 @@ const Calendar: React.FC<CalendarProps> = ({
                               </Text>
 
                               {/* Only show who posted for group goals */}
-                              {isGroupGoal && dayLogs[0].postedBy && (
+                              {isGroupGoal && (
                                 <View style={styles.posterIndicator}>
-                                  <Image
-                                    source={{
-                                      uri: dayLogs[0].postedBy.profilePic,
-                                    }}
-                                    style={styles.posterAvatar}
+                                  {/* For demo - we'd replace with actual user data */}
+                                  <View
+                                    style={styles.posterAvatarPlaceholder}
                                   />
                                   {hasMultiplePosts && (
                                     <View style={styles.multiplePostsIndicator}>
@@ -248,16 +286,15 @@ const styles = StyleSheet.create({
   calendarDayEmpty: {
     width: "100%",
     height: "100%",
-    backgroundColor: "#1F1F1F",
     borderRadius: 8,
-    alignItems: "center",
+    backgroundColor: "rgba(255, 255, 255, 0.08)",
     justifyContent: "center",
+    alignItems: "center",
   },
   calendarDayEmptyText: {
-    color: "white",
-    fontSize: 16,
+    color: "rgba(255, 255, 255, 0.4)",
+    fontSize: 14,
     fontFamily: FontFamily.Regular,
-    opacity: 0.5,
   },
   posterIndicator: {
     position: "absolute",
@@ -267,24 +304,34 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   posterAvatar: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "white",
+  },
+  posterAvatarPlaceholder: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#555",
     borderWidth: 1,
     borderColor: "white",
   },
   multiplePostsIndicator: {
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    borderRadius: 8,
-    marginLeft: -6,
-    paddingHorizontal: 4,
-    paddingVertical: 1,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#007AFF",
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: -8,
     borderWidth: 1,
     borderColor: "white",
   },
   multiplePostsText: {
     color: "white",
-    fontSize: 8,
+    fontSize: 10,
     fontFamily: FontFamily.SemiBold,
   },
 });

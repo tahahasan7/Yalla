@@ -29,10 +29,11 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon } from "../../components/common";
 import FlowStateIcon from "../../components/social/FlowStateIcon";
-import { CATEGORIES, Goal, GOALS } from "../../constants/goalData";
+import { CATEGORIES } from "../../constants/goalData";
 import { NAVBAR_HEIGHT } from "../../constants/socialData";
 import { DarkTheme, DefaultTheme } from "../../constants/theme";
 import { useColorScheme } from "../../hooks/useColorScheme";
+import { goalService } from "../../services/goalService";
 
 // Get screen dimensions for responsive layout
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
@@ -43,20 +44,28 @@ const GoalItem = ({
   isSelected,
   onSelect,
 }: {
-  goal: Goal;
+  goal: any;
   isSelected: boolean;
-  onSelect: (goal: Goal) => void;
+  onSelect: (goal: any) => void;
 }) => {
   // Get the category icon for the goal
   const getCategoryIcon = () => {
     // Find the category in CATEGORIES array
-    const category = CATEGORIES.find((cat) => cat.name === goal.category);
+    const category = CATEGORIES.find((cat) => cat.name === goal.category?.name);
 
     // If category found, return the icon info, otherwise return a default
-    return category || { name: "Default", icon: goal.icon };
+    return (
+      category || {
+        name: goal.category?.name || "Default",
+        icon: "flag-outline",
+      }
+    );
   };
 
   const categoryIcon = getCategoryIcon();
+
+  // Get the flow state (adding a default value if not present)
+  const flowState = goal.flow_state || "still";
 
   return (
     <TouchableOpacity
@@ -77,7 +86,7 @@ const GoalItem = ({
           <Text style={styles.goalFrequency}>{goal.frequency}</Text>
         </View>
       </View>
-      <FlowStateIcon flowState={goal.flowState} size={22} />
+      <FlowStateIcon flowState={flowState} size={22} />
     </TouchableOpacity>
   );
 };
@@ -94,7 +103,7 @@ export default function GoalCameraScreen() {
   const [caption, setCaption] = useState("");
   const [processing, setProcessing] = useState(false);
   const [showGoalSelector, setShowGoalSelector] = useState(false);
-  const [selectedGoal, setSelectedGoal] = useState<Goal | null>(null);
+  const [selectedGoal, setSelectedGoal] = useState<any | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const cameraRef = useRef<any>(null);
   const insets = useSafeAreaInsets();
@@ -105,11 +114,19 @@ export default function GoalCameraScreen() {
   const [isNavigating, setIsNavigating] = useState(false);
   const [cameraReady, setCameraReady] = useState(true);
 
+  // Add state for goals fetched from database
+  const [goals, setGoals] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Add a separate state for showing the loading indicator
+  const [showLoading, setShowLoading] = useState(false);
+
   // Add isMounted ref to prevent state updates after unmounting
   const isMounted = useRef(true);
 
   // Add timeoutRef to track and clear timeouts
   const timeoutRef = useRef<number | null>(null);
+  const loadingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Get the category icon for the currently selected goal
   const getSelectedGoalIcon = () => {
@@ -117,10 +134,10 @@ export default function GoalCameraScreen() {
 
     // Find the category in CATEGORIES array
     const category = CATEGORIES.find(
-      (cat) => cat.name === selectedGoal.category
+      (cat) => cat.name === selectedGoal.category?.name
     );
 
-    // Return the category if found, otherwise use the goal's icon as fallback
+    // Return the category if found, otherwise use a default icon as fallback
     return category;
   };
 
@@ -145,6 +162,79 @@ export default function GoalCameraScreen() {
   const [saveToast, setSaveToast] = useState(false);
   const [freezeFrame, setFreezeFrame] = useState(false);
   const freezeFrameScale = useRef(new Animated.Value(1)).current;
+
+  // Fetch goals from database
+  const fetchGoals = async () => {
+    try {
+      // Start loading state
+      setIsLoading(true);
+
+      // Set a timeout to show loading indicator only if fetch takes more than 2 seconds
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+      }
+
+      loadingTimeoutRef.current = setTimeout(() => {
+        if (isMounted.current && isLoading) {
+          setShowLoading(true);
+        }
+      }, 2000);
+
+      const { data, error } = await goalService.getUserGoals();
+
+      // Clear the loading timeout
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
+
+      if (error) {
+        console.error("Error fetching goals:", error);
+        if (isMounted.current) {
+          setIsLoading(false);
+          setShowLoading(false);
+        }
+        return;
+      }
+
+      if (isMounted.current) {
+        // Filter out completed goals
+        const activeGoals = data.filter((goal) => !goal.completed);
+        setGoals(activeGoals);
+        setIsLoading(false);
+        setShowLoading(false);
+      }
+    } catch (error) {
+      console.error("Error in fetchGoals:", error);
+      if (isMounted.current) {
+        setIsLoading(false);
+        setShowLoading(false);
+      }
+    }
+  };
+
+  // Call fetchGoals when the component mounts and when it gains focus
+  useEffect(() => {
+    fetchGoals();
+
+    // Safety timeout to ensure loading state doesn't get stuck
+    const safetyTimeout = setTimeout(() => {
+      if (isMounted.current && isLoading) {
+        setIsLoading(false);
+        setShowLoading(false);
+      }
+    }, 5000); // 5 seconds timeout
+
+    // Cleanup on unmount
+    return () => {
+      isMounted.current = false;
+      clearTimeout(safetyTimeout);
+      if (loadingTimeoutRef.current) {
+        clearTimeout(loadingTimeoutRef.current);
+        loadingTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   // Add effect to handle reset parameter from post-sharing
   useEffect(() => {
@@ -171,6 +261,9 @@ export default function GoalCameraScreen() {
       // Reset navigation state on focus
       setIsNavigating(false);
 
+      // Refetch goals when screen is focused
+      fetchGoals();
+
       // Setup hardware back button handler (Android)
       const backHandler = BackHandler.addEventListener(
         "hardwareBackPress",
@@ -187,6 +280,18 @@ export default function GoalCameraScreen() {
       return () => {
         // Set navigating to prevent further interactions
         setIsNavigating(true);
+
+        // Reset loading state to prevent showing loading indicator when coming back
+        if (isMounted.current) {
+          setIsLoading(false);
+          setShowLoading(false);
+        }
+
+        // Clear any loading timeouts
+        if (loadingTimeoutRef.current) {
+          clearTimeout(loadingTimeoutRef.current);
+          loadingTimeoutRef.current = null;
+        }
 
         // Remove back handler
         backHandler.remove();
@@ -521,6 +626,26 @@ export default function GoalCameraScreen() {
     }
   };
 
+  // Handle Next button action
+  const handleNext = () => {
+    // Prevent if navigating
+    if (isNavigating) return;
+
+    // Navigate to post sharing screen
+    if (capturedImage && selectedGoal) {
+      router.push({
+        pathname: "/post-sharing",
+        params: {
+          imageUri: capturedImage,
+          goalId: selectedGoal.id,
+          goalTitle: selectedGoal.title,
+          goalColor: selectedGoal.color,
+          goalIcon: selectedCategoryIcon?.icon || "flag-outline",
+        },
+      });
+    }
+  };
+
   // Post the image (implementation would connect to your backend)
   const postImage = async () => {
     if (!capturedImage || !selectedGoal || isNavigating) return;
@@ -545,26 +670,6 @@ export default function GoalCameraScreen() {
       if (isMounted.current) {
         setIsNavigating(false);
       }
-    }
-  };
-
-  // Handle Next button action
-  const handleNext = () => {
-    // Prevent if navigating
-    if (isNavigating) return;
-
-    // Navigate to post sharing screen
-    if (capturedImage && selectedGoal) {
-      router.push({
-        pathname: "/post-sharing",
-        params: {
-          imageUri: capturedImage,
-          goalId: selectedGoal.id,
-          goalTitle: selectedGoal.title,
-          goalColor: selectedGoal.color,
-          goalIcon: selectedGoal.icon || selectedCategoryIcon?.icon,
-        },
-      });
     }
   };
 
@@ -596,7 +701,12 @@ export default function GoalCameraScreen() {
 
   // Updated function to toggle goal selector with fixed animations
   function toggleGoalSelector() {
-    // Toggle state first
+    // If we're showing the selector, force a goals refresh
+    if (!showGoalSelector) {
+      fetchGoals();
+    }
+
+    // Toggle state
     setShowGoalSelector(!showGoalSelector);
 
     // Use separate animations - one for opacity/translate (native) and one for height (non-native)
@@ -620,7 +730,7 @@ export default function GoalCameraScreen() {
   }
 
   // Handle goal selection
-  const selectGoal = (goal: Goal) => {
+  const selectGoal = (goal: any) => {
     setSelectedGoal(goal);
     toggleGoalSelector();
   };
@@ -934,20 +1044,49 @@ export default function GoalCameraScreen() {
                   Choose which goal you're working towards with this photo
                 </Text>
 
-                <FlatList
-                  data={GOALS.filter((goal) => !goal.completed)}
-                  keyExtractor={(item) => item.id}
-                  renderItem={({ item }) => (
-                    <GoalItem
-                      goal={item}
-                      isSelected={selectedGoal?.id === item.id}
-                      onSelect={selectGoal}
+                {showLoading ? (
+                  <View style={styles.loadingContainer}>
+                    <ActivityIndicator size="large" color="#fff" />
+                    <Text style={styles.loadingText}>Loading goals...</Text>
+                  </View>
+                ) : goals.length > 0 ? (
+                  <FlatList
+                    data={goals}
+                    keyExtractor={(item) => item.id}
+                    renderItem={({ item }) => (
+                      <GoalItem
+                        goal={item}
+                        isSelected={selectedGoal?.id === item.id}
+                        onSelect={selectGoal}
+                      />
+                    )}
+                    showsVerticalScrollIndicator={false}
+                    style={styles.goalList}
+                    contentContainerStyle={styles.goalListContent}
+                  />
+                ) : (
+                  <View style={styles.emptyStateContainer}>
+                    <Ionicons
+                      name="flag-outline"
+                      size={40}
+                      color="rgba(255,255,255,0.6)"
                     />
-                  )}
-                  showsVerticalScrollIndicator={false}
-                  style={styles.goalList}
-                  contentContainerStyle={styles.goalListContent}
-                />
+                    <Text style={styles.emptyStateText}>
+                      No active goals found
+                    </Text>
+                    <Text style={styles.emptyStateSubtext}>
+                      Create a goal first to capture your progress
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.createGoalButton}
+                      onPress={() => router.push("/create-goal")}
+                    >
+                      <Text style={styles.createGoalButtonText}>
+                        Create Goal
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
               </Animated.View>
             )}
 
@@ -1357,5 +1496,50 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+  loadingContainer: {
+    padding: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    minHeight: 200,
+  },
+  loadingText: {
+    color: "white",
+    fontSize: 16,
+    fontWeight: "600",
+    marginTop: 16,
+  },
+  emptyStateContainer: {
+    padding: 40,
+    justifyContent: "center",
+    alignItems: "center",
+    minHeight: 200,
+  },
+  emptyStateText: {
+    color: "white",
+    fontSize: 18,
+    fontWeight: "600",
+    marginTop: 16,
+  },
+  emptyStateSubtext: {
+    color: "rgba(255, 255, 255, 0.7)",
+    fontSize: 14,
+    textAlign: "center",
+    marginTop: 8,
+    maxWidth: 250,
+  },
+  createGoalButton: {
+    backgroundColor: "#fff",
+    borderRadius: 100,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    marginTop: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  createGoalButtonText: {
+    color: "#000",
+    fontSize: 16,
+    fontWeight: "600",
   },
 });

@@ -1,6 +1,8 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useNavigation } from "@react-navigation/native";
+import * as FileSystem from "expo-file-system";
 import * as Haptics from "expo-haptics";
+import * as ImageManipulator from "expo-image-manipulator";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useState } from "react";
 import {
@@ -20,15 +22,19 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Icon, ProfileAvatar } from "../components/common";
 import { DarkTheme, DefaultTheme } from "../constants/theme";
+import { useAuth } from "../hooks/useAuth";
 import { useColorScheme } from "../hooks/useColorScheme";
+import { supabase } from "../lib/supabase";
+import { goalService } from "../services/goalService";
 
-// Dummy user data (replace with actual user data in a real app)
-const USER = {
-  name: "John Doe",
-  username: "@johndoe",
-  profilePic: "https://randomuser.me/api/portraits/men/32.jpg",
-};
+// Remove the dummy user data as we'll use the authenticated user
+// const USER = {
+//   name: "John Doe",
+//   username: "@johndoe",
+//   profilePic: "https://randomuser.me/api/portraits/men/32.jpg",
+// };
 
 export default function PostSharingScreen() {
   const colorScheme = useColorScheme();
@@ -37,6 +43,7 @@ export default function PostSharingScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
+  const { user } = useAuth(); // Get the authenticated user
 
   // Get params from navigation
   const imageUri = params.imageUri as string;
@@ -50,6 +57,7 @@ export default function PostSharingScreen() {
   const [isPosting, setIsPosting] = useState(false);
   const [postToFeed, setPostToFeed] = useState(true);
   const [showShareOptions, setShowShareOptions] = useState(false);
+  const [captionError, setCaptionError] = useState("");
 
   // Handle going back to camera
   const handleCancel = () => {
@@ -98,28 +106,150 @@ export default function PostSharingScreen() {
     );
   };
 
+  // Validate form before posting
+  const validateForm = () => {
+    // Clear any previous errors
+    setCaptionError("");
+
+    // Check if caption is empty
+    if (!caption.trim()) {
+      setCaptionError("Please add a caption to describe your progress");
+      return false;
+    }
+
+    return true;
+  };
+
+  // Upload image to Supabase storage
+  const uploadImage = async (
+    uri: string,
+    retryCount = 0
+  ): Promise<string | null> => {
+    try {
+      // Get file info to make sure it exists and has size
+      const fileInfo = await FileSystem.getInfoAsync(uri);
+
+      if (!fileInfo.exists || fileInfo.size === 0) {
+        console.error("File does not exist or has zero size");
+        return null;
+      }
+
+      // Process and compress the image to ensure it's in a good format
+      const processedImage = await ImageManipulator.manipulateAsync(
+        uri,
+        [{ resize: { width: 1200 } }], // Resize to a reasonable width while maintaining aspect ratio
+        { compress: 0.8, format: ImageManipulator.SaveFormat.JPEG }
+      );
+
+      // Create a unique filename in the goals bucket
+      const fileExt = "jpg";
+      const fileName = `goals/${user?.id}/${goalId}/${Date.now()}.${fileExt}`;
+
+      // Create a form data object for the upload
+      const formData = new FormData();
+      // @ts-ignore: React Native special format for FormData
+      formData.append("file", {
+        uri: processedImage.uri,
+        name: fileName,
+        type: "image/jpeg",
+      });
+
+      // Get authentication token
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token || "";
+
+      // Make a direct API call to Supabase Storage
+      const response = await fetch(
+        `https://gyigpabcwedkwkfaxuxp.supabase.co/storage/v1/object/avatars/${fileName}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: formData,
+        }
+      );
+
+      const responseData = await response.json();
+
+      if (!response.ok) {
+        console.error("Error uploading to Supabase:", responseData);
+
+        if (retryCount < 2) {
+          return uploadImage(uri, retryCount + 1);
+        }
+
+        return null;
+      }
+
+      // Return the public URL to the uploaded file
+      return `https://gyigpabcwedkwkfaxuxp.supabase.co/storage/v1/object/public/avatars/${fileName}`;
+    } catch (error) {
+      console.error("Unexpected error in uploadImage:", error);
+
+      // Retry logic for unexpected errors (up to 2 retries)
+      if (retryCount < 2) {
+        return uploadImage(uri, retryCount + 1);
+      }
+
+      return null;
+    }
+  };
+
   // Handle posting the image
   const handlePost = async () => {
+    // Validate the form
+    if (!validateForm()) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     setIsPosting(true);
 
     try {
-      // This would be your API call to post the image
-      console.log("Posting image", {
-        imageUri,
-        goalId,
-        goalTitle,
-        caption,
-        postToFeed,
+      if (!user?.id) {
+        throw new Error("User not authenticated");
+      }
+
+      // Upload image to storage first
+      const uploadedImageUrl = await uploadImage(imageUri);
+
+      if (!uploadedImageUrl) {
+        throw new Error("Failed to upload image to storage");
+      }
+
+      // Format today's date in YYYY-MM-DD format for the database
+      const today = new Date().toISOString().split("T")[0];
+
+      // Log the goal progress with the cloud storage URL instead of local URI
+      const { data, error } = await goalService.logGoalProgress({
+        goal_id: goalId,
+        user_id: user.id,
+        image_url: uploadedImageUrl,
+        caption: caption.trim(),
+        date: today, // Adding today's date
       });
 
-      // Simulate network request
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (error) {
+        console.error("Error posting goal log:", error);
+        Alert.alert(
+          "Error",
+          "There was a problem posting your update. Please try again."
+        );
+        return;
+      }
+
+      console.log("Goal log posted successfully:", data);
 
       // Navigate back to main screen after posting
       router.replace("/");
     } catch (error) {
       console.error("Error posting image:", error);
+      Alert.alert(
+        "Error",
+        "There was a problem posting your update. Please try again."
+      );
     } finally {
       setIsPosting(false);
     }
@@ -173,13 +303,13 @@ export default function PostSharingScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Fixed User Info Section */}
+        {/* Fixed User Info Section - Using authenticated user data */}
         <View style={styles.userInfoContainer}>
-          <Image source={{ uri: USER.profilePic }} style={styles.profilePic} />
+          <ProfileAvatar user={user} size={40} style={styles.profileAvatar} />
 
           <View style={styles.userInfo}>
             <Text style={[styles.userName, { color: theme.colors.text }]}>
-              {USER.name}
+              {user?.name || "User"}
             </Text>
           </View>
 
@@ -213,11 +343,18 @@ export default function PostSharingScreen() {
             <View style={styles.content}>
               {/* Caption input */}
               <TextInput
-                style={[styles.captionInput, { color: theme.colors.text }]}
-                placeholder="Write a caption..."
+                style={[
+                  styles.captionInput,
+                  { color: theme.colors.text },
+                  captionError ? styles.inputError : null,
+                ]}
+                placeholder="Write a caption... (required)"
                 placeholderTextColor={"grey"}
                 value={caption}
                 onChangeText={(text) => {
+                  // Clear error when user starts typing
+                  if (captionError) setCaptionError("");
+
                   // Limit consecutive new lines to maximum of 2
                   const limitedText = text.replace(/\n{3,}/g, "\n\n");
                   setCaption(limitedText);
@@ -228,14 +365,25 @@ export default function PostSharingScreen() {
                 blurOnSubmit={true}
               />
 
+              {/* Error message */}
+              {captionError ? (
+                <Text style={styles.errorText}>{captionError}</Text>
+              ) : null}
+
               {/* Image preview with goal badge overlaid */}
               <View style={styles.imageContainer}>
                 <Image source={{ uri: imageUri }} style={styles.previewImage} />
-                {/* Goal badge layered on top of the image */}
+                {/* Goal badge layered on top of the image - Using the correct icon */}
                 <View
                   style={[styles.goalBadge, { backgroundColor: goalColor }]}
                 >
-                  <Ionicons name="flag" size={14} color="#fff" />
+                  {/* Use Icon component for custom icons or Ionicons for standard ones */}
+                  {goalIcon &&
+                    (goalIcon.includes("outline") || goalIcon.includes("-") ? (
+                      <Ionicons name={goalIcon as any} size={14} color="#fff" />
+                    ) : (
+                      <Icon name={goalIcon as any} size={14} color="#fff" />
+                    ))}
                   <Text style={styles.goalBadgeText}>{goalTitle}</Text>
                 </View>
               </View>
@@ -392,6 +540,9 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginRight: 12,
   },
+  profileAvatar: {
+    marginRight: 12,
+  },
   userInfo: {
     flex: 1,
   },
@@ -402,15 +553,23 @@ const styles = StyleSheet.create({
   captionInput: {
     fontSize: 16,
     maxHeight: 150,
-
-    // textAlignVertical: "top",
     marginBottom: 16,
     borderWidth: 1,
-    // borderColor: "rgba(79, 79, 79, 0.59)",
     backgroundColor: "rgba(255, 255, 255, 0.17)",
     borderRadius: 14,
     paddingVertical: 10,
     paddingHorizontal: 12,
+  },
+  inputError: {
+    borderColor: "#FF3B30",
+    borderWidth: 1,
+  },
+  errorText: {
+    color: "#FF3B30",
+    fontSize: 13,
+    marginBottom: 12,
+    marginTop: -8,
+    paddingHorizontal: 4,
   },
   imageContainer: {
     borderRadius: 12,

@@ -6,8 +6,9 @@ import {
 } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Dimensions,
   ScrollView,
   StatusBar,
@@ -22,9 +23,10 @@ import Calendar from "../components/goal-details/Calendar";
 import ImageModal from "../components/goal-details/ImageModal";
 import Timeline from "../components/goal-details/Timeline";
 import { FontFamily } from "../constants/fonts";
+import { fetchUserProfile, useAuth } from "../hooks/useAuth";
 import { useColorScheme } from "../hooks/useColorScheme";
-// Import the goals data
-import { GOALS, Log } from "../constants/goalData";
+// Import the goals service
+import { GoalLogItem, goalService } from "../services/goalService";
 
 // Custom flow state icon without background
 const FlowStateIconNoBackground = ({
@@ -56,9 +58,21 @@ export default function GoalDetailsScreen() {
   const [flowInfoPosition, setFlowInfoPosition] = useState({ top: 150 });
   const flowButtonRef = useRef<View>(null);
   const [isNavigating, setIsNavigating] = useState(false);
+  const { user } = useAuth();
+
+  // State for goal logs
+  const [goalLogs, setGoalLogs] = useState<GoalLogItem[]>([]);
+  // Add new state for pre-processed data
+  const [processedData, setProcessedData] = useState<{
+    sortedMonths: [string, GoalLogItem[]][];
+    sortedMonthsWithSortedDays: [string, GoalLogItem[]][];
+  }>({ sortedMonths: [], sortedMonthsWithSortedDays: [] });
+  const [isLoading, setIsLoading] = useState(true);
 
   // State variables for the image modal
-  const [selectedDay, setSelectedDay] = useState<Log | Log[] | null>(null);
+  const [selectedDay, setSelectedDay] = useState<
+    GoalLogItem | GoalLogItem[] | null
+  >(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [imagePosition, setImagePosition] = useState({
     x: 0,
@@ -78,11 +92,8 @@ export default function GoalDetailsScreen() {
   // Get the ID from params
   const goalId = params.id as string;
 
-  // Find the goal in the GOALS array
-  const goalFromData = GOALS.find((g) => g.id === goalId);
-
-  // Parse goal data from params or use the data from GOALS
-  const goal = goalFromData || {
+  // Parse goal data from params
+  const goal = {
     id: params.id as string,
     title: params.title as string,
     color: params.color as string,
@@ -102,79 +113,150 @@ export default function GoalDetailsScreen() {
   // Check if this is a group goal
   const isGroupGoal = goal.goalType === "group";
 
-  // Get the logs from the goal data
-  const timelineData = goalFromData?.logs || [];
-
   // Capitalize flow state for display
   const flowStateCapitalized =
     goal.flowState.charAt(0).toUpperCase() + goal.flowState.slice(1);
 
-  // Sort the timeline data by date (for calculating goal days)
-  const sortedTimelineData = [...timelineData].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-  );
+  // Add user prefetching state
+  const [usersForGoal, setUsersForGoal] = useState<{ [key: string]: any }>({});
+  const [isUserDataLoaded, setIsUserDataLoaded] = useState(false);
 
-  // Group timeline items by month
-  const groupedByMonth: Record<string, Log[]> = sortedTimelineData.reduce(
-    (groups: Record<string, Log[]>, item: Log) => {
-      const month = item.month;
-      if (!groups[month]) {
-        groups[month] = [];
+  // Fetch user data for all logs upfront
+  const prefetchUserData = useCallback(async (logs: GoalLogItem[]) => {
+    if (!logs.length) return;
+
+    try {
+      // Get unique user IDs from logs
+      const userIds = new Set<string>();
+      logs.forEach((log) => {
+        if (log.user_id) userIds.add(log.user_id);
+      });
+
+      // Skip if no users to fetch
+      if (userIds.size === 0) {
+        setIsUserDataLoaded(true);
+        return;
       }
-      groups[month].push(item);
-      return groups;
-    },
-    {}
-  );
 
-  // Flatten the grouped items to create a single timeline
-  const flatTimelineItems = Object.values(groupedByMonth).flat();
+      // Fetch all users in parallel
+      const userPromises = Array.from(userIds).map(async (userId) => {
+        try {
+          const userData = await fetchUserProfile(userId);
+          return { userId, userData };
+        } catch (error) {
+          console.error(`Error fetching user ${userId}:`, error);
+          return {
+            userId,
+            userData: { id: userId, name: "User" },
+          };
+        }
+      });
 
-  // Sort months in reverse chronological order (latest first)
-  const sortedMonths = Object.entries(groupedByMonth).sort((a, b) => {
-    // Extract year from month string (e.g., "December 2025" -> 2025)
-    const yearA = parseInt(a[0].split(" ")[1]);
-    const yearB = parseInt(b[0].split(" ")[1]);
+      const results = await Promise.all(userPromises);
 
-    // Extract month from month string (e.g., "December 2025" -> December)
-    const monthA = a[0].split(" ")[0];
-    const monthB = b[0].split(" ")[0];
+      // Build user cache
+      const userCache: { [key: string]: any } = {};
+      results.forEach(({ userId, userData }) => {
+        if (userData) {
+          userCache[userId] = userData;
+        }
+      });
 
-    // Convert month names to numbers for comparison
-    const monthNames = [
-      "January",
-      "February",
-      "March",
-      "April",
-      "May",
-      "June",
-      "July",
-      "August",
-      "September",
-      "October",
-      "November",
-      "December",
-    ];
-    const monthNumA = monthNames.indexOf(monthA);
-    const monthNumB = monthNames.indexOf(monthB);
-
-    // Compare years first, then months
-    if (yearA !== yearB) {
-      return yearB - yearA; // Latest year first
+      setUsersForGoal(userCache);
+      setIsUserDataLoaded(true);
+    } catch (error) {
+      console.error("Error prefetching user data:", error);
+      setIsUserDataLoaded(true);
     }
-    return monthNumB - monthNumA; // Latest month first
-  });
+  }, []);
 
-  // Sort days within each month in reverse chronological order (latest first)
-  const sortedMonthsWithSortedDays: [string, Log[]][] = sortedMonths.map(
-    ([month, items]) => {
-      // Sort items by date in reverse chronological order
-      const sortedItems = [...items].sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      );
-      return [month, sortedItems] as [string, Log[]];
-    }
-  );
+  // Update the fetch goal logs useEffect to prefetch user data
+  useEffect(() => {
+    const fetchGoalLogs = async () => {
+      setIsLoading(true);
+      setIsUserDataLoaded(false);
+
+      if (goalId) {
+        const { data } = await goalService.getGoalLogs(goalId);
+        setGoalLogs(data);
+
+        // Prefetch user data for all logs
+        await prefetchUserData(data);
+
+        // Process data for both views at once to avoid reprocessing on toggle
+        if (data.length > 0) {
+          // Group timeline items by month
+          const groupedByMonth: Record<string, GoalLogItem[]> = data.reduce(
+            (groups: Record<string, GoalLogItem[]>, item: GoalLogItem) => {
+              const month = item.month || "";
+              if (!groups[month]) {
+                groups[month] = [];
+              }
+              groups[month].push(item);
+              return groups;
+            },
+            {}
+          );
+
+          // Sort months in reverse chronological order (latest first)
+          const sortedMonths = Object.entries(groupedByMonth).sort((a, b) => {
+            // Extract year from month string (e.g., "December 2025" -> 2025)
+            const yearA = parseInt(a[0].split(" ")[1]);
+            const yearB = parseInt(b[0].split(" ")[1]);
+
+            // Extract month from month string (e.g., "December 2025" -> December)
+            const monthA = a[0].split(" ")[0];
+            const monthB = b[0].split(" ")[0];
+
+            // Convert month names to numbers for comparison
+            const monthNames = [
+              "January",
+              "February",
+              "March",
+              "April",
+              "May",
+              "June",
+              "July",
+              "August",
+              "September",
+              "October",
+              "November",
+              "December",
+            ];
+            const monthNumA = monthNames.indexOf(monthA);
+            const monthNumB = monthNames.indexOf(monthB);
+
+            // Compare years first, then months
+            if (yearA !== yearB) {
+              return yearB - yearA; // Latest year first
+            }
+            return monthNumB - monthNumA; // Latest month first
+          });
+
+          // Sort days within each month in reverse chronological order (latest first)
+          const sortedMonthsWithSortedDays: [string, GoalLogItem[]][] =
+            sortedMonths.map(([month, items]) => {
+              // Sort items by created_at timestamp in reverse chronological order
+              const sortedItems = [...items].sort(
+                (a, b) =>
+                  new Date(b.created_at).getTime() -
+                  new Date(a.created_at).getTime()
+              );
+              return [month, sortedItems] as [string, GoalLogItem[]];
+            });
+
+          // Store the processed data
+          setProcessedData({
+            sortedMonths,
+            sortedMonthsWithSortedDays,
+          });
+        }
+        setIsLoading(false);
+      }
+    };
+
+    fetchGoalLogs();
+  }, [goalId, prefetchUserData]);
 
   // Toggle between grid and list view
   const toggleViewMode = () => {
@@ -220,7 +302,7 @@ export default function GoalDetailsScreen() {
   }, [navigation, isNavigating]);
 
   // Function to show the day popup
-  const showDayModal = (day: Log | Log[], dayKey: string) => {
+  const showDayModal = (day: GoalLogItem | GoalLogItem[], dayKey: string) => {
     // If we have multiple logs, use the first one as default
     const selectedLogItem = Array.isArray(day) ? day[0] : day;
 
@@ -264,12 +346,12 @@ export default function GoalDetailsScreen() {
     dayRefs[key] = ref;
   };
 
-  // UPDATED - Handle back button press to navigate to goals tab
+  // Handle back button press to navigate to goals tab
   const handleBackPress = () => {
     router.back();
   };
 
-  // In goal-details.tsx - Handle camera button press
+  // Handle camera button press
   const handleCameraPress = () => {
     // Prevent rapid navigation
     if (isNavigating) return;
@@ -298,6 +380,22 @@ export default function GoalDetailsScreen() {
       setIsNavigating(false);
     }, 500);
   };
+
+  // Check for goal flow state
+  useEffect(() => {
+    const fetchFlowState = async () => {
+      if (goalId && user?.id) {
+        try {
+          const { data } = await goalService.getGoalFlowState(goalId, user.id);
+          // We could update the goal's flow state here if needed
+        } catch (err) {
+          console.error("Error fetching flow state:", err);
+        }
+      }
+    };
+
+    fetchFlowState();
+  }, [goalId, user?.id]);
 
   return (
     <View
@@ -505,19 +603,35 @@ export default function GoalDetailsScreen() {
         style={styles.scrollContent}
         contentContainerStyle={styles.scrollContentContainer}
       >
-        {isGridView ? (
+        {isLoading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#fff" />
+            <Text style={styles.loadingText}>Loading your progress...</Text>
+          </View>
+        ) : goalLogs.length === 0 ? (
+          <View style={styles.emptyGridContainer}>
+            <Text style={styles.emptyStateText}>
+              No logs yet. Tap the + button to add your progress!
+            </Text>
+          </View>
+        ) : isGridView ? (
           <Calendar
-            sortedMonths={sortedMonths}
+            goalLogs={goalLogs}
+            sortedMonths={processedData.sortedMonths}
             onDayPress={showDayModal}
             registerDayRef={registerDayRef}
             isGroupGoal={isGroupGoal}
           />
         ) : (
           <Timeline
-            sortedMonthsWithSortedDays={sortedMonthsWithSortedDays}
+            sortedMonthsWithSortedDays={
+              processedData.sortedMonthsWithSortedDays
+            }
             onDayPress={showDayModal}
             registerDayRef={registerDayRef}
             isGroupGoal={isGroupGoal}
+            usersCache={usersForGoal}
+            isUserDataLoaded={isUserDataLoaded}
           />
         )}
       </ScrollView>
@@ -847,5 +961,18 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.Medium,
     color: "white",
     textAlign: "center",
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    minHeight: 300,
+    paddingVertical: 20,
+  },
+  loadingText: {
+    color: "white",
+    fontSize: 16,
+    fontFamily: FontFamily.Medium,
+    marginTop: 16,
   },
 });

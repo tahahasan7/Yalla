@@ -241,7 +241,7 @@ export default function GoalsScreen() {
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           >
             <View style={styles.profileContainer}>
-              <ProfileAvatar user={user} size={36} style={styles.profilePic} />
+              <ProfileAvatar user={user} size={36} />
             </View>
           </TouchableOpacity>
 
@@ -507,8 +507,6 @@ const styles = StyleSheet.create({
     borderStyle: "dashed",
   },
   profilePic: {
-    width: 36,
-    height: 36,
     borderRadius: 18,
   },
   quoteButton: {

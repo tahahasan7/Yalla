@@ -152,7 +152,16 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onLongPress }) => {
               ]}
             >
               <ProfileAvatar
-                imageUri={participant.user.profile_pic_url}
+                user={{
+                  id: participant.user.id,
+                  profile_pic_url: participant.user.profile_pic_url,
+                  name: participant.user.name,
+                  email: "",
+                  app_metadata: {},
+                  user_metadata: {},
+                  aud: "",
+                  created_at: "",
+                }}
                 size={24}
               />
             </View>
@@ -384,11 +393,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   avatarWrapper: {
-    width: 24,
-    height: 24,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#1F1F1F",
+    overflow: "hidden",
   },
   moreIndicator: {
     width: 24,

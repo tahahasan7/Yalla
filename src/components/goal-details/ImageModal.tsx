@@ -19,13 +19,15 @@ import {
   View,
 } from "react-native";
 import { FontFamily } from "../../constants/fonts";
-import { Log } from "../../constants/goalData";
+import { fetchUserProfile } from "../../hooks/useAuth";
+import { GoalLogItem } from "../../services/goalService";
+import { ProfileAvatar } from "../common";
 
 // Constant for slideshow timer (in milliseconds)
 const SLIDESHOW_TIMEOUT = 5000; // 5 seconds per image
 
 interface ImageModalProps {
-  selectedDay: Log | Log[] | null;
+  selectedDay: GoalLogItem | GoalLogItem[] | null;
   isVisible: boolean;
   imagePosition: {
     x: number;
@@ -35,6 +37,13 @@ interface ImageModalProps {
   };
   onClose: () => void;
   isGroupGoal?: boolean;
+}
+
+// User data interface
+interface UserData {
+  id: string;
+  name?: string;
+  profile_pic_url?: string;
 }
 
 const ImageModal: React.FC<ImageModalProps> = ({
@@ -50,11 +59,14 @@ const ImageModal: React.FC<ImageModalProps> = ({
   const [isDownloading, setIsDownloading] = useState(false);
   const [showSuccessNotification, setShowSuccessNotification] = useState(false);
   const [notificationMessage, setNotificationMessage] = useState("");
-  const [selectedPost, setSelectedPost] = useState<Log | null>(null);
-  const [multiplePosts, setMultiplePosts] = useState<Log[]>([]);
+  const [selectedPost, setSelectedPost] = useState<GoalLogItem | null>(null);
+  const [multiplePosts, setMultiplePosts] = useState<GoalLogItem[]>([]);
   const [currentPostIndex, setCurrentPostIndex] = useState(0);
   const [slideshowActive, setSlideshowActive] = useState(true); // Autoplay by default
   const [slideshowProgress, setSlideshowProgress] = useState(0);
+
+  // Add user data cache
+  const [userCache, setUserCache] = useState<Record<string, UserData>>({});
 
   // Track if modal is fully open
   const isModalOpenRef = useRef(false);
@@ -104,6 +116,43 @@ const ImageModal: React.FC<ImageModalProps> = ({
     opacity: useRef(new Animated.Value(0)).current,
     contentOpacity: useRef(new Animated.Value(0)).current,
   };
+
+  // Fetch user data when posts change
+  useEffect(() => {
+    const fetchUsers = async () => {
+      if (!multiplePosts.length) return;
+
+      // Get all unique user IDs from posts
+      const userIds = new Set<string>();
+      multiplePosts.forEach((post) => {
+        if (post.user_id) userIds.add(post.user_id);
+      });
+
+      // Fetch user data for each unique ID
+      const newCache: Record<string, UserData> = { ...userCache };
+
+      for (const userId of Array.from(userIds)) {
+        // Skip if already in cache
+        if (newCache[userId]) continue;
+
+        const userData = await fetchUserProfile(userId);
+        if (userData) {
+          newCache[userId] = {
+            id: userId,
+            name: userData.name,
+            profile_pic_url: userData.profile_pic_url,
+          };
+        } else {
+          // Add placeholder if fetch failed
+          newCache[userId] = { id: userId, name: "User" };
+        }
+      }
+
+      setUserCache(newCache);
+    };
+
+    fetchUsers();
+  }, [multiplePosts]);
 
   // Reset animation values when component unmounts
   useEffect(() => {
@@ -307,7 +356,7 @@ const ImageModal: React.FC<ImageModalProps> = ({
   };
 
   // Function to handle changing the selected post without any animation
-  const handleSelectPost = (post: Log, index: number) => {
+  const handleSelectPost = (post: GoalLogItem, index: number) => {
     if (selectedPost?.id === post.id || isAnimating) return;
 
     // Update the index
@@ -322,6 +371,44 @@ const ImageModal: React.FC<ImageModalProps> = ({
 
     // Ensure we're not triggering modal animations
     // Don't touch isModalOpenRef as it should remain true
+  };
+
+  // Helper function to get day of week
+  const getDayOfWeek = (dateString: string) => {
+    const date = new Date(dateString);
+    const days = [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ];
+    return days[date.getDay()];
+  };
+
+  // Format the post date for display
+  const formatPostDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const months = [
+      "January",
+      "February",
+      "March",
+      "April",
+      "May",
+      "June",
+      "July",
+      "August",
+      "September",
+      "October",
+      "November",
+      "December",
+    ];
+
+    return `${getDayOfWeek(dateString)}, ${
+      months[date.getMonth()]
+    } ${date.getDate()}, ${date.getFullYear()}`;
   };
 
   // Function to handle image tap to advance
@@ -469,8 +556,10 @@ const ImageModal: React.FC<ImageModalProps> = ({
     if (selectedPost) {
       try {
         await Share.share({
-          url: selectedPost.imageUrl,
-          message: `Check out my progress on day ${selectedPost.goalDay}: ${selectedPost.caption}`,
+          url: selectedPost.image_url,
+          message: `Check out my progress on day ${currentPostIndex + 1}: ${
+            selectedPost.caption
+          }`,
         });
       } catch (error) {
         console.error("Error sharing image:", error);
@@ -514,11 +603,22 @@ const ImageModal: React.FC<ImageModalProps> = ({
           Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         }
 
+        // Ensure the image URL is valid and properly formatted
+        const imageUrl = selectedPost.image_url;
+
+        // Check if it's a valid URL (either remote or local)
+        if (
+          !imageUrl ||
+          (!imageUrl.startsWith("http") && !imageUrl.startsWith("file://"))
+        ) {
+          throw new Error(`Invalid image URL: ${imageUrl}`);
+        }
+
         if (Platform.OS === "web") {
           // Web platform handling
           const link = document.createElement("a");
-          link.href = selectedPost.imageUrl;
-          link.download = `day_${selectedPost.goalDay}.jpg`;
+          link.href = imageUrl;
+          link.download = `day_${currentPostIndex + 1}.jpg`;
           document.body.appendChild(link);
           link.click();
           document.body.removeChild(link);
@@ -537,29 +637,43 @@ const ImageModal: React.FC<ImageModalProps> = ({
           if (status === "granted") {
             // Create a local file URL for the image
             const fileUri =
-              FileSystem.documentDirectory + `day_${selectedPost.goalDay}.jpg`;
+              FileSystem.documentDirectory + `day_${currentPostIndex + 1}.jpg`;
 
-            // Download the image
-            const downloadResult = await FileSystem.downloadAsync(
-              selectedPost.imageUrl,
-              fileUri
-            );
+            // Download the image - works for both remote URLs and local file:// URIs
+            let finalUri;
 
-            if (downloadResult.status === 200) {
-              // Save the image to the media library
-              const asset = await MediaLibrary.createAssetAsync(
-                downloadResult.uri
+            // If it's already a local file, just copy it
+            if (imageUrl.startsWith("file://")) {
+              const copyResult = await FileSystem.copyAsync({
+                from: imageUrl,
+                to: fileUri,
+              });
+              finalUri = fileUri;
+            } else {
+              // It's a remote URL, download it
+              const downloadResult = await FileSystem.downloadAsync(
+                imageUrl,
+                fileUri
               );
-              await MediaLibrary.createAlbumAsync("Yalla Goals", asset, false);
 
-              // Show notification
-              showNotification("Saved to gallery");
+              if (downloadResult.status !== 200) {
+                throw new Error(
+                  `Download failed with status ${downloadResult.status}`
+                );
+              }
 
-              // Success haptic feedback
-              Haptics.notificationAsync(
-                Haptics.NotificationFeedbackType.Success
-              );
+              finalUri = downloadResult.uri;
             }
+
+            // Save the image to the media library
+            const asset = await MediaLibrary.createAssetAsync(finalUri);
+            await MediaLibrary.createAlbumAsync("Yalla Goals", asset, false);
+
+            // Show notification
+            showNotification("Saved to gallery");
+
+            // Success haptic feedback
+            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
           } else {
             Alert.alert(
               "Permission Denied",
@@ -588,7 +702,7 @@ const ImageModal: React.FC<ImageModalProps> = ({
     item,
     index,
   }: {
-    item: Log;
+    item: GoalLogItem;
     index: number;
   }) => {
     const isSelected = selectedPost?.id === item.id;
@@ -605,17 +719,13 @@ const ImageModal: React.FC<ImageModalProps> = ({
         activeOpacity={0.9}
       >
         <Image
-          source={{ uri: item.imageUrl }}
+          source={{ uri: item.image_url }}
           style={styles.thumbnailImage}
           fadeDuration={0}
         />
         {isGroupGoal && (
           <View style={styles.thumbnailOverlay}>
-            <Image
-              source={{ uri: item.postedBy.profilePic }}
-              style={styles.thumbnailUserAvatar}
-              fadeDuration={0}
-            />
+            <View style={styles.thumbnailUserAvatar} />
           </View>
         )}
       </TouchableOpacity>
@@ -640,6 +750,9 @@ const ImageModal: React.FC<ImageModalProps> = ({
       </View>
     );
   };
+
+  // If there's no selected post, don't render anything
+  if (!selectedPost) return null;
 
   return (
     <Modal
@@ -688,10 +801,13 @@ const ImageModal: React.FC<ImageModalProps> = ({
                 <View style={styles.profileContainer}>
                   <View style={styles.headerTextSection}>
                     <Text style={styles.modalTitle}>
-                      Day {selectedPost?.goalDay}
+                      Day {currentPostIndex + 1}
                     </Text>
                     <Text style={styles.modalDate}>
-                      {selectedPost?.month.split(" ")[0]} {selectedPost?.day}
+                      {new Date(selectedPost.date).toLocaleDateString("en-US", {
+                        month: "short",
+                        day: "numeric",
+                      })}
                     </Text>
                   </View>
 
@@ -740,26 +856,37 @@ const ImageModal: React.FC<ImageModalProps> = ({
                     {/* Single image with no transition - key forces a complete re-render */}
                     <Image
                       key={`img-${selectedPost?.id}`}
-                      source={{ uri: selectedPost?.imageUrl }}
+                      source={{ uri: selectedPost?.image_url }}
                       style={styles.expandingImage}
                       resizeMode="cover"
                       fadeDuration={0}
                     />
                   </View>
 
-                  {/* User profile picture in top left of image (for group goals) */}
-                  {isGroupGoal && selectedPost?.postedBy && (
-                    <View style={styles.imageProfileContainer}>
-                      <Image
-                        source={{ uri: selectedPost.postedBy.profilePic }}
-                        style={styles.imageProfilePic}
-                        fadeDuration={0}
-                      />
-                      <Text style={styles.imageProfileName}>
-                        {selectedPost.postedBy.name}
-                      </Text>
-                    </View>
-                  )}
+                  {/* User profile picture - always show regardless of group status */}
+                  <View style={styles.imageProfileContainer}>
+                    {selectedPost.user_id &&
+                      userCache[selectedPost.user_id] && (
+                        <ProfileAvatar
+                          size={32}
+                          user={{
+                            id: userCache[selectedPost.user_id].id,
+                            profile_pic_url:
+                              userCache[selectedPost.user_id].profile_pic_url,
+                            name: userCache[selectedPost.user_id].name,
+                            email: "",
+                            app_metadata: {},
+                            user_metadata: {},
+                            aud: "",
+                            created_at: "",
+                          }}
+                          style={{ marginRight: 0 }}
+                        />
+                      )}
+                    <Text style={styles.imageProfileName}>
+                      {userCache[selectedPost.user_id]?.name || "User"}
+                    </Text>
+                  </View>
 
                   {/* Controls and overlay elements */}
                   <View
@@ -807,7 +934,7 @@ const ImageModal: React.FC<ImageModalProps> = ({
                       style={styles.actionsOverlay}
                       pointerEvents="box-none"
                     >
-                      {/* Download button */}
+                      {/* Remove Like button, keep only download and share */}
                       <TouchableOpacity
                         style={styles.imageActionButton}
                         onPress={downloadImage}
@@ -898,10 +1025,6 @@ const styles = StyleSheet.create({
     backgroundColor: "#1F1F1F",
     zIndex: 1, // Ensure image is at base level
   },
-  expandingImageHighRes: {
-    width: "100%",
-    height: "100%",
-  },
   modalContentContainer: {
     width: "100%",
     backgroundColor: "#1F1F1F",
@@ -912,7 +1035,6 @@ const styles = StyleSheet.create({
     display: "flex",
     flexDirection: "column",
   },
-  // Profile container styling
   profileContainer: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -926,7 +1048,6 @@ const styles = StyleSheet.create({
   headerTextSection: {
     flex: 1,
   },
-  // Header close button
   headerCloseButton: {
     width: 36,
     height: 36,
@@ -946,20 +1067,13 @@ const styles = StyleSheet.create({
     color: "rgba(255, 255, 255, 0.6)",
     marginTop: 4,
   },
-  captionOuterContainer: {
+  fullContentScrollContainer: {
     flex: 1,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(255, 255, 255, 0.1)",
     marginTop: 8,
-    marginHorizontal: 16,
   },
-  captionScrollContainer: {
-    flex: 1,
-    paddingTop: 12,
-  },
-  captionContent: {
+  fullContentContainer: {
+    paddingHorizontal: 16,
     paddingBottom: 20,
-    paddingRight: 8,
   },
   modalCaption: {
     fontSize: 16,
@@ -968,7 +1082,6 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     marginTop: 8,
   },
-  // Image actions overlay
   actionsOverlay: {
     position: "absolute",
     bottom: 20,
@@ -991,22 +1104,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 3,
     elevation: 5,
-  },
-  // Thumbnails section styling
-  imageTopControls: {
-    position: "absolute",
-    top: 20,
-    left: 0,
-    right: 0,
-    paddingHorizontal: 8,
-    alignItems: "center",
-    zIndex: 20,
-  },
-  topThumbnailsContainer: {
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    borderRadius: 12,
   },
   postThumbnail: {
     width: 48,
@@ -1036,7 +1133,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "white",
   },
-  // Notification styling
   notificationContainer: {
     position: "absolute",
     top: 0,
@@ -1070,15 +1166,6 @@ const styles = StyleSheet.create({
     ...StyleSheet.absoluteFillObject,
     zIndex: 5, // Below content but above overlay
   },
-  fullContentScrollContainer: {
-    flex: 1,
-    marginTop: 8,
-  },
-  fullContentContainer: {
-    paddingHorizontal: 16,
-    paddingBottom: 20,
-  },
-  // New styles for profile picture in image
   imageProfileContainer: {
     position: "absolute",
     top: 16,
@@ -1088,6 +1175,7 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.5)",
     borderRadius: 20,
     padding: 6,
+    paddingRight: 12,
     zIndex: 30,
   },
   imageProfilePic: {
@@ -1096,6 +1184,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1.5,
     borderColor: "white",
+    backgroundColor: "#555",
   },
   imageProfileName: {
     color: "white",
@@ -1103,7 +1192,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.SemiBold,
     marginLeft: 8,
   },
-  // Progress bar styles
   progressBarContainer: {
     position: "absolute",
     top: 0,
@@ -1121,7 +1209,6 @@ const styles = StyleSheet.create({
     height: 4,
     backgroundColor: "#0E96FF",
   },
-  // Slideshow control button
   slideshowButton: {
     position: "absolute",
     top: 20,
@@ -1134,7 +1221,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
     zIndex: 30,
   },
-  // Pagination dots
   paginationContainer: {
     position: "absolute",
     bottom: 16,
