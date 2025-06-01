@@ -5,6 +5,7 @@ import {
   Dimensions,
   Easing,
   Image,
+  Linking,
   Modal,
   PanResponder,
   StyleSheet,
@@ -24,7 +25,11 @@ interface MusicInfoBottomSheetProps {
     coverUrl: string | undefined;
     title: string;
     artist: string;
+    spotifyUri?: string;
+    spotifyUrl?: string;
   };
+  isPlaying?: boolean;
+  onPlayPausePress?: () => void;
 }
 
 const DRAG_THRESHOLD = 120; // Distance user needs to drag to dismiss
@@ -33,6 +38,8 @@ const MusicInfoBottomSheet = ({
   visible,
   onClose,
   song,
+  isPlaying = false,
+  onPlayPausePress,
 }: MusicInfoBottomSheetProps) => {
   // Animation values
   const modalBackgroundOpacity = useRef(new Animated.Value(0)).current;
@@ -116,6 +123,34 @@ const MusicInfoBottomSheet = ({
     title: "Unknown Track",
     artist: "Unknown Artist",
     coverUrl: "https://via.placeholder.com/200",
+    spotifyUri: undefined,
+    spotifyUrl: undefined,
+  };
+
+  const handleOpenSpotify = async () => {
+    try {
+      // Try to open the Spotify app first using URI
+      if (songData.spotifyUri) {
+        const canOpenSpotify = await Linking.canOpenURL(songData.spotifyUri);
+        if (canOpenSpotify) {
+          await Linking.openURL(songData.spotifyUri);
+          return;
+        }
+      }
+
+      // Fallback to web URL if URI doesn't work or isn't available
+      if (songData.spotifyUrl) {
+        await Linking.openURL(songData.spotifyUrl);
+      } else {
+        // If no specific URL is provided, search for the song on Spotify web
+        const searchQuery = encodeURIComponent(
+          `${songData.title} ${songData.artist}`
+        );
+        await Linking.openURL(`https://open.spotify.com/search/${searchQuery}`);
+      }
+    } catch (error) {
+      console.error("Error opening Spotify:", error);
+    }
   };
 
   // Combine modal animation and drag for final transform
@@ -168,11 +203,28 @@ const MusicInfoBottomSheet = ({
             <View style={styles.songInfoContainer}>
               <Text style={styles.songTitle}>{songData.title}</Text>
               <Text style={styles.artistName}>{songData.artist}</Text>
+
+              {/* Play/Pause Button */}
+              {onPlayPausePress && (
+                <TouchableOpacity
+                  style={styles.playPauseButton}
+                  onPress={onPlayPausePress}
+                >
+                  <Ionicons
+                    name={isPlaying ? "pause-circle" : "play-circle"}
+                    size={48}
+                    color="#1DB954"
+                  />
+                </TouchableOpacity>
+              )}
             </View>
           </View>
 
           {/* Spotify Button */}
-          <TouchableOpacity style={styles.spotifyButton}>
+          <TouchableOpacity
+            style={styles.spotifyButton}
+            onPress={handleOpenSpotify}
+          >
             <Ionicons name="musical-notes" size={18} color="#FFFFFF" />
             <Text style={styles.spotifyButtonText}>Open in Spotify</Text>
           </TouchableOpacity>
@@ -260,6 +312,10 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.Regular,
     fontSize: 16,
     color: "#AAAAAA",
+    marginBottom: 15,
+  },
+  playPauseButton: {
+    marginTop: 5,
   },
   spotifyButton: {
     backgroundColor: "#1DB954", // Spotify green

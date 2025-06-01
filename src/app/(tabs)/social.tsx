@@ -1,6 +1,6 @@
 import { Icon } from "@/components/common";
 import * as Haptics from "expo-haptics";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
@@ -28,6 +28,10 @@ import { useTabPress } from "./_layout";
 // Import useAuth hook for user profile data
 import { useAuth } from "../../hooks/useAuth";
 import { supabase } from "../../lib/supabase";
+// Import the audio player module to control playback
+import { AudioModule } from "expo-audio";
+import { useFocusEffect } from "expo-router";
+import audioManager from "../../lib/audioManager";
 
 const { width } = Dimensions.get("window");
 
@@ -53,6 +57,9 @@ interface Post {
     name: string;
     artist: string;
     coverUrl: string;
+    audioUrl: any;
+    spotifyUri?: string;
+    spotifyUrl?: string;
     [key: string]: any;
   };
   likes: number;
@@ -75,6 +82,7 @@ interface PostItemProps {
   handleLike: (postId: string) => void;
   handleDoubleTap: (postId: string) => void;
   toggleMusicPlayer: (postId: string) => void;
+  currentIndex: number;
   [key: string]: any;
 }
 
@@ -663,7 +671,7 @@ export default function SocialScreen() {
     }
   };
 
-  // Improved scroll event handler with better pull-to-refresh logic
+  // Improved scroll event handler with better index tracking for audio playback
   const handleScroll = Animated.event(
     [{ nativeEvent: { contentOffset: { y: scrollY } } }],
     {
@@ -686,37 +694,22 @@ export default function SocialScreen() {
           lastRotationValue.current = 0;
         }
 
+        // Calculate the visible post index based on scroll position
+        // This is crucial for triggering audio playback in the right post
+        const calculatedIndex = Math.round(offsetY / itemHeight);
+        const boundedIndex = Math.max(
+          0,
+          Math.min(calculatedIndex, POSTS.length - 1)
+        );
+
         // Only update the index when we're not in a programmatic scroll
-        if (!isScrolling.current && scrollState === "idle") {
-          // Calculate new index with a bias toward the direction of scroll to make it more responsive
-          const velocity = event.nativeEvent.velocity?.y || 0;
-          const direction = Math.sign(velocity);
-
-          // Base index calculation
-          let newIndex = Math.round(offsetY / itemHeight);
-
-          // Apply a small bias in the direction of the scroll to make it easier to switch posts
-          if (Math.abs(velocity) > 0.5) {
-            // If there's significant velocity, bias the index in that direction slightly
-            // This makes it easier to swipe to the next/previous post
-            newIndex = Math.round(offsetY / itemHeight + direction * 0.2);
-          }
-
-          // Ensure index stays within bounds
-          newIndex = Math.max(0, Math.min(newIndex, POSTS.length - 1));
-
-          if (newIndex !== currentIndex) {
-            // Use a debounce pattern to prevent rapid state changes causing flicker
-            if (scrollTimeoutRef.current) {
-              clearTimeout(scrollTimeoutRef.current);
-            }
-
-            scrollTimeoutRef.current = setTimeout(() => {
-              if (!isScrolling.current && scrollState === "idle") {
-                setCurrentIndex(newIndex);
-              }
-            }, 20); // Small delay for debouncing
-          }
+        // and when the index has actually changed
+        if (
+          !isScrolling.current &&
+          scrollState === "idle" &&
+          boundedIndex !== currentIndex
+        ) {
+          setCurrentIndex(boundedIndex);
         }
       },
     }
@@ -749,6 +742,7 @@ export default function SocialScreen() {
             handleLike={handleLike}
             handleDoubleTap={handleDoubleTap}
             toggleMusicPlayer={toggleMusicPlayer}
+            currentIndex={currentIndex}
           />
         </View>
       </View>
@@ -839,6 +833,61 @@ export default function SocialScreen() {
   const contentTopOffset = isRefreshing
     ? HEADER_WITH_STATUSBAR + 60 // Add room for the spinner when refreshing
     : HEADER_WITH_STATUSBAR + 20; // Normal spacing when not refreshing
+
+  // Add useFocusEffect to stop audio when screen loses focus
+  useFocusEffect(
+    useCallback(() => {
+      console.log("Social screen is now in focus - audio enabled");
+
+      // Setup function when screen comes into focus
+      const setupAudio = async () => {
+        try {
+          // Set audio as active when screen comes into focus
+          await AudioModule.setIsAudioActiveAsync(true);
+        } catch (error) {
+          console.error("Error activating audio:", error);
+        }
+      };
+
+      setupAudio();
+
+      // Cleanup function when screen loses focus
+      return () => {
+        console.log("Social screen lost focus - stopping all audio");
+
+        // Stop any playing audio
+        const currentPlayingPostId = audioManager.getCurrentPostId();
+        if (currentPlayingPostId) {
+          // Clear the current post ID in the manager
+          audioManager.setCurrentPostId(null);
+
+          // Set audio to inactive
+          AudioModule.setIsAudioActiveAsync(false).catch((err) =>
+            console.error("Error stopping audio on blur:", err)
+          );
+        }
+      };
+    }, [])
+  );
+
+  // Add effect to stop music when component unmounts (navigating away)
+  useEffect(() => {
+    // Cleanup function that runs when component unmounts
+    return () => {
+      // Get the ID of the currently playing post
+      const currentPlayingPostId = audioManager.getCurrentPostId();
+      if (currentPlayingPostId) {
+        console.log("Leaving social feed, stopping all audio playback");
+        // Clear the current post ID in the manager
+        audioManager.setCurrentPostId(null);
+
+        // Set the audio to inactive when leaving the screen
+        AudioModule.setIsAudioActiveAsync(false).catch((err) =>
+          console.error("Error stopping audio:", err)
+        );
+      }
+    };
+  }, []);
 
   return (
     <View

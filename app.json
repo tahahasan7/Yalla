@@ -18,6 +18,9 @@
       "bundleIdentifier": "com.tahahasan7.yalla",
       "config": {
         "usesAppleSignIn": true
+      },
+      "infoPlist": {
+        "UIBackgroundModes": ["audio"]
       }
     },
     "android": {
@@ -57,6 +60,12 @@
             "./assets/fonts/Outfit-Regular.ttf",
             "./assets/fonts/Outfit-SemiBold.ttf"
           ]
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "Allow $(PRODUCT_NAME) to access your microphone"
         }
       ],
       "expo-web-browser",

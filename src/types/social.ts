@@ -28,6 +28,9 @@ export interface Post {
     name: string;
     artist: string;
     coverUrl: string;
+    audioUrl: any; // Required asset for audio playback
+    spotifyUri?: string;
+    spotifyUrl?: string;
   };
   likes: number;
 }

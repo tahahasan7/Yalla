@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import { Post } from "../types/social";
 
 // Constants
@@ -24,9 +25,13 @@ export const POSTS: Post[] = [
       date: "April 21, 2025",
     },
     song: {
-      name: "Run the World",
-      artist: "Beyoncé",
-      coverUrl: "https://picsum.photos/100/100",
+      name: "Weight of My Love",
+      artist: "Amick Cutler",
+      coverUrl:
+        "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxzZWFyY2h8Mnx8bXVzaWN8ZW58MHwxfDB8fA%3D%3D&w=1000&q=80",
+      audioUrl: require("../../assets/music/Amick Cutler - Weight of My Love.mp3"),
+      spotifyUrl: undefined,
+      spotifyUri: undefined,
     },
     likes: 243,
   },
@@ -47,9 +52,13 @@ export const POSTS: Post[] = [
       date: "April 20, 2025",
     },
     song: {
-      name: "Stronger",
-      artist: "Kanye West",
-      coverUrl: "https://picsum.photos/100/100",
+      name: "On Top",
+      artist: "Jimmy Curtis",
+      coverUrl:
+        "https://images.unsplash.com/photo-1511379938547-c1f69419868d?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxzZWFyY2h8NXx8bXVzaWN8ZW58MHwxfDB8fA%3D%3D&w=1000&q=80",
+      audioUrl: require("../../assets/music/Jimmy Curtis - On Top.mp3"),
+      spotifyUrl: undefined,
+      spotifyUri: undefined,
     },
     likes: 567,
   },
@@ -70,9 +79,13 @@ export const POSTS: Post[] = [
       date: "April 18, 2025",
     },
     song: {
-      name: "On Top of the World",
-      artist: "Imagine Dragons",
-      coverUrl: "https://picsum.photos/100/100",
+      name: "Wild",
+      artist: "Jane The Boy",
+      coverUrl:
+        "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxzZWFyY2h8NXx8bXVzaWN8ZW58MHwxfDB8fA%3D%3D&w=1000&q=80",
+      audioUrl: require("../../assets/music/Jane  The Boy - Wild.mp3"),
+      spotifyUrl: undefined,
+      spotifyUri: undefined,
     },
     likes: 892,
   },
@@ -93,12 +106,14 @@ export const POSTS: Post[] = [
       date: "April 16, 2025",
     },
     song: {
-      name: "Breathe",
-      artist: "Sia",
-      coverUrl: "https://picsum.photos/100/100",
+      name: "Prelude in E Minor Op 28 No 4",
+      artist: "Birraj",
+      coverUrl:
+        "https://images.unsplash.com/photo-1507838153414-b4b713384a76?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxzZWFyY2h8MTV8fG11c2ljfGVufDB8MXwwfHw%3D&w=1000&q=80",
+      audioUrl: require("../../assets/music/Birraj - Prelude in E Minor Op 28 No 4.mp3"),
+      spotifyUrl: undefined,
+      spotifyUri: undefined,
     },
     likes: 412,
   },
 ];
-
-import { Platform } from "react-native";

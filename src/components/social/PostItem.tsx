@@ -1,8 +1,9 @@
 import { Ionicons } from "@expo/vector-icons";
+import { AudioModule, useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import { router } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import { router, useFocusEffect } from "expo-router";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Easing,
@@ -13,6 +14,7 @@ import {
   View,
 } from "react-native";
 import { FontFamily } from "../../constants/fonts";
+import audioManager from "../../lib/audioManager";
 import { Post } from "../../types/social";
 import { Icon } from "../common";
 import FlowStateIcon from "./FlowStateIcon";
@@ -31,6 +33,7 @@ interface PostItemProps {
   handleLike: (postId: string) => void;
   handleDoubleTap: (postId: string) => void;
   toggleMusicPlayer: (postId: string) => void;
+  currentIndex?: number;
 }
 
 const PostItem = ({
@@ -46,6 +49,7 @@ const PostItem = ({
   handleLike: parentHandleLike,
   handleDoubleTap,
   toggleMusicPlayer,
+  currentIndex,
 }: PostItemProps) => {
   // Local state to manage like/surprise state
   const [isLiked, setIsLiked] = useState(initialIsLiked);
@@ -57,6 +61,48 @@ const PostItem = ({
   const [showSurpriseParticles, setShowSurpriseParticles] = useState(false);
   // State for surprise button active state
   const [isSurprised, setIsSurprised] = useState(false);
+  // Track if this component should allow playback (based on screen focus)
+  const [isScreenFocused, setIsScreenFocused] = useState(true);
+
+  // Create audio player using the hook from expo-audio
+  const audioPlayer = useAudioPlayer(item.song.audioUrl);
+  // Get player status
+  const playerStatus = useAudioPlayerStatus(audioPlayer);
+  // Check if audio is playing
+  const isPlaying = playerStatus?.playing || false;
+
+  // Set audio to loop mode
+  useEffect(() => {
+    if (audioPlayer) {
+      // Set looping to true - this property exists directly on the audioPlayer object
+      audioPlayer.loop = true;
+    }
+  }, [audioPlayer]);
+
+  // Listen for screen focus/blur events
+  useFocusEffect(
+    useCallback(() => {
+      // Screen is focused
+      setIsScreenFocused(true);
+
+      // Cleanup when screen loses focus
+      return () => {
+        // Screen is blurred
+        setIsScreenFocused(false);
+
+        // Stop any audio playing in this post when screen loses focus
+        if (isPlaying && audioPlayer) {
+          console.log(`Screen blurred - stopping audio for post ${item.id}`);
+          audioPlayer.pause();
+
+          // If this was the playing post, clear it
+          if (audioManager.getCurrentPostId() === item.id) {
+            audioManager.setCurrentPostId(null);
+          }
+        }
+      };
+    }, [audioPlayer, isPlaying, item.id])
+  );
 
   // Animation values for button scaling
   const surpriseScale = useRef(new Animated.Value(1)).current;
@@ -67,6 +113,88 @@ const PostItem = ({
     setIsLiked(initialIsLiked);
     setShowHeartParticles(initialShowParticles);
   }, [initialIsLiked, initialShowParticles]);
+
+  // Auto-play audio when this item is the current item
+  useEffect(() => {
+    let isMounted = true;
+
+    const updateAudioState = async () => {
+      if (!isMounted) return;
+
+      // Only handle audio if screen is focused
+      if (!isScreenFocused) {
+        // If screen is not focused, ensure audio is paused
+        if (isPlaying) {
+          try {
+            await audioPlayer.pause();
+          } catch (error) {
+            console.error(
+              "Error pausing audio when screen is not focused:",
+              error
+            );
+          }
+        }
+        return;
+      }
+
+      if (currentIndex !== undefined) {
+        if (currentIndex === index) {
+          // Track the currently playing post
+          audioManager.setCurrentPostId(item.id);
+
+          // Check if audio is globally enabled before playing
+          if (audioManager.isAudioEnabled()) {
+            // This post is in view, play the audio if not already playing
+            if (!isPlaying && audioPlayer) {
+              try {
+                console.log("Playing audio for post", item.id);
+                await audioPlayer.play();
+              } catch (error) {
+                console.error("Error playing audio:", error);
+              }
+            }
+          } else {
+            // Audio is globally disabled, ensure this post's audio is paused
+            if (isPlaying) {
+              try {
+                await audioPlayer.pause();
+              } catch (error) {
+                console.error("Error pausing audio:", error);
+              }
+            }
+          }
+        } else if (isPlaying) {
+          // This post is no longer in view, pause the audio
+          console.log("Pausing audio for post", item.id);
+          try {
+            await audioPlayer.pause();
+          } catch (error) {
+            console.error("Error pausing audio:", error);
+          }
+
+          // If this was the playing post, clear it
+          if (audioManager.getCurrentPostId() === item.id) {
+            audioManager.setCurrentPostId(null);
+          }
+        }
+      }
+    };
+
+    updateAudioState();
+
+    // Clean up function to handle component unmount or dependency changes
+    return () => {
+      isMounted = false;
+
+      if (isPlaying) {
+        try {
+          audioPlayer.pause();
+        } catch (error) {
+          console.error("Error pausing audio on cleanup:", error);
+        }
+      }
+    };
+  }, [currentIndex, index, audioPlayer, isPlaying, item.id, isScreenFocused]);
 
   // Heartbeat animation for music cover
   const musicCoverScale = useRef(new Animated.Value(1)).current;
@@ -162,12 +290,55 @@ const PostItem = ({
 
   // Open/close bottom sheet handlers
   const handleOpenMusicBottomSheet = () => {
+    // Only show the bottom sheet, don't call toggleMusicPlayer which affects audio
     setMusicBottomSheetVisible(true);
-    toggleMusicPlayer(item.id);
   };
 
-  const handleCloseMusicBottomSheet = () => {
+  const handleCloseMusicBottomSheet = async () => {
     setMusicBottomSheetVisible(false);
+  };
+
+  // Function to play/pause audio
+  const toggleAudio = async () => {
+    // Only allow toggling audio if screen is focused
+    if (!isScreenFocused) return;
+
+    try {
+      // Ensure audio is active before toggling
+      await AudioModule.setIsAudioActiveAsync(true);
+
+      if (isPlaying) {
+        // Properly stop audio playback
+        await audioPlayer.pause();
+
+        // Set global audio state to disabled
+        audioManager.setAudioEnabled(false);
+
+        // If this was the playing post, clear it
+        if (audioManager.getCurrentPostId() === item.id) {
+          audioManager.setCurrentPostId(null);
+        }
+      } else {
+        // Enable global audio
+        audioManager.setAudioEnabled(true);
+
+        // First, stop any currently playing audio
+        const currentPlayingId = audioManager.getCurrentPostId();
+        if (currentPlayingId && currentPlayingId !== item.id) {
+          // This means another post's audio is playing, we should stop it
+          // The audio will be stopped automatically when this post becomes current
+        }
+
+        // Set this as the current playing post
+        audioManager.setCurrentPostId(item.id);
+        await audioPlayer.play();
+      }
+
+      // Provide haptic feedback when toggling audio
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (error) {
+      console.error("Error toggling audio:", error);
+    }
   };
 
   // Button press animation function
@@ -235,6 +406,11 @@ const PostItem = ({
     }
   };
 
+  // Add this new simplified function to directly open the bottom sheet
+  const openMusicSheet = () => {
+    setMusicBottomSheetVisible(true);
+  };
+
   return (
     <>
       <Animated.View
@@ -300,7 +476,7 @@ const PostItem = ({
                   <TouchableOpacity
                     onPress={() =>
                       router.push({
-                        pathname: "/profile",
+                        pathname: "/profile/profile-page",
                         params: { userId: item.id },
                       })
                     }
@@ -360,78 +536,49 @@ const PostItem = ({
               </View>
             </View>
 
-            {/* Right side controls with enhanced animations */}
+            {/* Bottom right controls */}
             <View style={styles.likeContainer}>
-              {/* Enhanced Music Player with Cover Heartbeat Animation */}
+              {/* Global play/pause button */}
+              <TouchableOpacity
+                style={styles.globalAudioButton}
+                onPress={toggleAudio}
+              >
+                <Ionicons
+                  name={
+                    audioManager.isAudioEnabled() && isPlaying
+                      ? "pause-circle"
+                      : "play-circle"
+                  }
+                  color="#1DB954"
+                  size={28}
+                />
+              </TouchableOpacity>
+
+              {/* Music info button */}
               <View style={styles.musicContainer}>
                 <TouchableOpacity
                   onPress={handleOpenMusicBottomSheet}
                   hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
                 >
-                  <Animated.Image
-                    source={{ uri: item.song.coverUrl }}
-                    style={[
-                      styles.musicCover,
-                      {
-                        transform: [{ scale: musicCoverScale }],
-                      },
-                    ]}
-                  />
+                  <View style={styles.musicCoverContainer}>
+                    <Animated.View
+                      style={[
+                        styles.musicCoverPlaceholder,
+                        {
+                          transform: [{ scale: musicCoverScale }],
+                        },
+                      ]}
+                    >
+                      <Ionicons name="musical-notes" color="white" size={14} />
+                    </Animated.View>
+                    {isPlaying && (
+                      <View style={styles.playingIndicator}>
+                        <Ionicons name="pause" color="white" size={12} />
+                      </View>
+                    )}
+                  </View>
                 </TouchableOpacity>
               </View>
-
-              {/* Enhanced Like Button with animations */}
-              {/* <TouchableOpacity
-                style={[styles.likeButton, isLiked && styles.likeButtonActive]}
-                onPress={() => handleLike(item.id)}
-                activeOpacity={0.7}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Animated.View
-                  style={{
-                    transform: [
-                      {
-                        scale: likeScale,
-                      },
-                    ],
-                  }}
-                >
-                  <Icon
-                    name="LoveKorean"
-                    color={isLiked ? "#FF375F" : "white"}
-                    size={24}
-                  />
-                </Animated.View>
-                <HeartParticles visible={showHeartParticles} />
-              </TouchableOpacity> */}
-
-              {/* Enhanced Surprise Button with Surprise Particles */}
-              {/* <TouchableOpacity
-                style={[
-                  styles.shareButton,
-                  isSurprised && styles.surpriseButtonActive,
-                ]}
-                onPress={handleSurprisePress}
-                activeOpacity={0.7}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <Animated.View
-                  style={{
-                    transform: [
-                      {
-                        scale: surpriseScale,
-                      },
-                    ],
-                  }}
-                >
-                  <Icon
-                    name="Surprise"
-                    color={isSurprised ? "#5856D6" : "white"}
-                    size={24}
-                  />
-                </Animated.View>
-                <SurpriseParticles visible={showSurpriseParticles} />
-              </TouchableOpacity> */}
             </View>
           </Animated.View>
         </View>
@@ -445,7 +592,11 @@ const PostItem = ({
           title: item.song.name,
           artist: item.song.artist,
           coverUrl: item.song.coverUrl,
+          spotifyUri: item.song.spotifyUri,
+          spotifyUrl: item.song.spotifyUrl,
         }}
+        isPlaying={isPlaying}
+        onPlayPausePress={toggleAudio}
       />
     </>
   );
@@ -506,13 +657,11 @@ const styles = StyleSheet.create({
   postOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: "space-between",
-
     paddingTop: 25,
     paddingBottom: 30,
     paddingHorizontal: 16,
     zIndex: 2,
   },
-
   postHeader: {
     width: "100%",
     flexDirection: "row",
@@ -560,7 +709,6 @@ const styles = StyleSheet.create({
   },
   username: {
     color: "hsla(0, 0.00%, 100.00%, .95)",
-
     fontFamily: FontFamily.SemiBold,
     fontSize: 18,
   },
@@ -581,18 +729,15 @@ const styles = StyleSheet.create({
   },
   goalName: {
     color: "hsla(0, 0.00%, 100.00%, .95)",
-
     fontSize: 18,
     fontFamily: FontFamily.SemiBold,
   },
-
   goalMessage: {
     color: "hsla(0, 0.00%, 100.00%, .90)",
     width: "90%",
     fontSize: 15,
     fontFamily: FontFamily.Regular,
   },
-
   weekText: {
     color: "hsla(0, 0.00%, 100.00%, .90)",
     fontSize: 15,
@@ -607,7 +752,6 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-
   musicContainer: {
     height: 41,
     width: 41,
@@ -616,17 +760,37 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderRadius: 23,
   },
-
-  musicCover: {
+  musicCoverContainer: {
     width: 20,
     height: 20,
     borderRadius: 20,
+    position: "relative",
   },
-
+  musicCoverPlaceholder: {
+    width: 20,
+    height: 20,
+    borderRadius: 20,
+    backgroundColor: "#1DB954", // Spotify green
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  playingIndicator: {
+    position: "absolute",
+    top: -3,
+    right: -3,
+    backgroundColor: "#1DB954", // Spotify green
+    borderRadius: 8,
+    width: 12,
+    height: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#000",
+  },
   likeContainer: {
     flexDirection: "column",
     justifyContent: "flex-end",
-    gap: 50,
+    gap: 16,
   },
   likeButton: {
     width: 41,
@@ -716,6 +880,7 @@ const styles = StyleSheet.create({
     },
     shadowOpacity: 0.3,
     shadowRadius: 8,
+    marginBottom: 8,
   },
   streakContainer: {
     backgroundColor: "rgba(255, 183, 77, 0.2)",
@@ -760,6 +925,27 @@ const styles = StyleSheet.create({
     textShadowColor: "rgba(0, 0, 0, 0.75)",
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 3,
+  },
+  globalAudioButton: {
+    width: 41,
+    height: 41,
+    borderRadius: 100,
+    backgroundColor: "rgba(0, 0, 0, 0.7)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 10,
+    shadowColor: "#1DB954", // Spotify green for the shadow
+    shadowOffset: {
+      width: 0,
+      height: 0,
+    },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+  },
+  menuIconContainer: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    alignItems: "center",
   },
 });
 
