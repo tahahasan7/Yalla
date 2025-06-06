@@ -33,6 +33,9 @@ export interface Post {
     spotifyUrl?: string;
   };
   likes: number;
+  caption?: string;
+  comments?: number;
+  timestamp?: string;
 }
 
 // Story item props

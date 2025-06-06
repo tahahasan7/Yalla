@@ -1,7 +1,9 @@
 import { Icon } from "@/components/common";
 import * as Haptics from "expo-haptics";
+import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
+  ActivityIndicator,
   Animated,
   Dimensions,
   Easing,
@@ -19,7 +21,7 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import YallaLogo from "../../assets/images/Yalla.svg";
 import PostItem from "../../components/social/PostItem";
-import { NAVBAR_HEIGHT, POSTS } from "../../constants/socialData";
+import { NAVBAR_HEIGHT } from "../../constants/socialData";
 import { DarkTheme, DefaultTheme } from "../../constants/theme";
 import { useColorScheme } from "../../hooks/useColorScheme";
 // Import the tab press context hook
@@ -32,43 +34,14 @@ import { supabase } from "../../lib/supabase";
 import { AudioModule } from "expo-audio";
 import { useFocusEffect } from "expo-router";
 import audioManager from "../../lib/audioManager";
+// Import music data for audio playback
+import { AUDIO_TRACK_MAP } from "../../constants/musicData";
+// Import Post type from types
+import { Post } from "../../types/social";
 
 const { width } = Dimensions.get("window");
 
-// Define types
-interface Post {
-  id: string;
-  user: {
-    name: string;
-    profilePic: string;
-    flowState: "still" | "kindling" | "flowing" | "glowing";
-    [key: string]: any;
-  };
-  imageUrl: string;
-  goal: {
-    type: "group" | "solo";
-    name: string;
-    message: string;
-    week: number;
-    date: string;
-    [key: string]: any;
-  };
-  song: {
-    name: string;
-    artist: string;
-    coverUrl: string;
-    audioUrl: any;
-    spotifyUri?: string;
-    spotifyUrl?: string;
-    [key: string]: any;
-  };
-  likes: number;
-  caption?: string;
-  comments?: number;
-  timestamp?: string;
-  [key: string]: any;
-}
-
+// Define types for props
 interface PostItemProps {
   item: Post;
   index: number;
@@ -184,6 +157,11 @@ export default function SocialScreen() {
   const { user, getProfileImage } = useAuth();
   const [friendRequests, setFriendRequests] = useState<number>(0);
 
+  // New state for posts data from database
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [isLoadingPosts, setIsLoadingPosts] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   // New state for tracking scroll operation state
   const [scrollState, setScrollState] = useState("idle"); // 'idle', 'scrolling', 'animating'
   const [touchDisabled, setTouchDisabled] = useState(false);
@@ -191,9 +169,7 @@ export default function SocialScreen() {
   // Animation refs
   const headerAnimation = useRef(new Animated.Value(1)).current;
   const musicPlayerAnim = useRef(new Animated.Value(0)).current;
-  const storyPulseAnim = useRef([
-    ...POSTS.map(() => new Animated.Value(1)),
-  ]).current;
+  const storyPulseAnim = useRef<Animated.Value[]>([]).current;
   const spinnerRotation = useRef(new Animated.Value(0)).current; // Controls rotation (0 = no rotation)
   const spinnerAnim = useRef(new Animated.Value(0)).current; // Controls opacity (0 = hidden)
 
@@ -231,6 +207,437 @@ export default function SocialScreen() {
   // Use the router for navigation
   const router = useRouter();
 
+  // Function to process music track data
+  const processMusicTrack = (trackName: string | null) => {
+    let songName = "No Music";
+    let artistName = "";
+    let audioUrl = null;
+    let coverUrl = "https://via.placeholder.com/150";
+
+    if (!trackName) {
+      return { songName, artistName, audioUrl, coverUrl };
+    }
+
+    console.log("Processing music track:", trackName);
+
+    // Try to find the audio file in our AUDIO_TRACK_MAP
+    try {
+      if (AUDIO_TRACK_MAP && AUDIO_TRACK_MAP[trackName]) {
+        audioUrl = AUDIO_TRACK_MAP[trackName];
+        console.log("Found audio URL for:", trackName);
+      } else {
+        console.log("No audio file found for:", trackName);
+      }
+    } catch (error) {
+      console.error("Error accessing AUDIO_TRACK_MAP:", error);
+    }
+
+    // Try to parse the music track in format "Artist - Song"
+    try {
+      const parts = trackName.split(" - ");
+      if (parts.length >= 2) {
+        artistName = parts[0].trim();
+        songName = parts.slice(1).join(" - ").trim().replace(".mp3", "");
+      } else {
+        // If not in expected format, use as is
+        try {
+          songName = trackName.replace(".mp3", "");
+        } catch (error) {
+          console.error("Error formatting track name:", error);
+          songName = trackName;
+        }
+      }
+    } catch (error) {
+      console.error("Error parsing track name:", error);
+      songName = trackName;
+    }
+
+    return { songName, artistName, audioUrl, coverUrl };
+  };
+
+  // Function to fetch posts from the database
+  const fetchPosts = async () => {
+    setIsLoadingPosts(true);
+    setError(null);
+
+    if (!user) {
+      console.log("No user logged in, can't fetch posts");
+      setIsLoadingPosts(false);
+      return;
+    }
+
+    console.log("Fetching posts for user:", user.id);
+
+    try {
+      // First, get the user's friends list
+      const { data: friendsData, error: friendsError } = await supabase
+        .from("friendships")
+        .select("user_id, friend_id")
+        .or(`user_id.eq.${user.id},friend_id.eq.${user.id}`)
+        .eq("status", "accepted");
+
+      if (friendsError) {
+        console.error("Error fetching friends:", friendsError);
+        throw friendsError;
+      }
+
+      console.log("Found", friendsData?.length || 0, "friendships");
+
+      // Extract friend IDs from the friendships data
+      const friendIds =
+        friendsData?.map((friendship) =>
+          friendship.user_id === user.id
+            ? friendship.friend_id
+            : friendship.user_id
+        ) || [];
+
+      // Only show posts from friends, not from the user themselves
+      const relevantUserIds = [...friendIds];
+
+      console.log("Showing posts from these users:", relevantUserIds);
+
+      // First check if there are any posts at all in the table
+      const { count: postsCount, error: countError } = await supabase
+        .from("social_posts")
+        .select("*", { count: "exact", head: true })
+        .in("user_id", relevantUserIds);
+
+      console.log("Total posts count from friends:", postsCount);
+
+      if (countError) {
+        console.error("Error counting posts:", countError);
+      }
+
+      // Fetch posts from friends only
+      const { data: socialPosts, error: socialPostsError } = await supabase
+        .from("social_posts")
+        .select("*")
+        .in("user_id", relevantUserIds)
+        .order("created_at", { ascending: false });
+
+      console.log("Social posts query result:", socialPosts);
+
+      if (socialPostsError) {
+        console.error("Error fetching social posts:", socialPostsError);
+        throw socialPostsError;
+      }
+
+      if (!socialPosts || socialPosts.length === 0) {
+        console.log("No posts found from friends");
+        setPosts([]);
+        setIsLoadingPosts(false);
+        return;
+      }
+
+      console.log("Found", socialPosts.length, "posts from friends");
+
+      // Fetch related goals data
+      const goalIds = socialPosts.map((post) => post.goal_id).filter(Boolean);
+      console.log("Goal IDs:", goalIds);
+
+      const { data: goalsData, error: goalsError } = await supabase
+        .from("goals")
+        .select("*")
+        .in("id", goalIds);
+
+      if (goalsError) {
+        console.error("Error fetching goals:", goalsError);
+      }
+
+      console.log("Goals data:", goalsData);
+
+      // Fetch related goal_logs data
+      const goalLogIds = socialPosts
+        .map((post) => post.goal_log_id)
+        .filter(Boolean);
+      console.log("Goal log IDs:", goalLogIds);
+
+      const { data: goalLogsData, error: goalLogsError } = await supabase
+        .from("goal_logs")
+        .select("*")
+        .in("id", goalLogIds);
+
+      if (goalLogsError) {
+        console.error("Error fetching goal logs:", goalLogsError);
+      }
+
+      console.log("Goal logs data:", goalLogsData);
+
+      // Get all user IDs from the posts
+      const postUserIds = socialPosts
+        .map((post) => post.user_id)
+        .filter(Boolean);
+      console.log("Post user IDs:", postUserIds);
+
+      // Fetch user data from the users table
+      const { data: usersData, error: usersError } = await supabase
+        .from("users")
+        .select("*")
+        .in("id", postUserIds);
+
+      if (usersError) {
+        console.error("Error fetching users:", usersError);
+      } else {
+        console.log("Users data:", usersData);
+      }
+
+      // Create lookup maps for faster access
+      const goalsMap = (goalsData || []).reduce(
+        (map: Record<string, any>, goal: any) => {
+          map[goal.id] = goal;
+          return map;
+        },
+        {}
+      );
+
+      const goalLogsMap = (goalLogsData || []).reduce(
+        (map: Record<string, any>, log: any) => {
+          map[log.id] = log;
+          return map;
+        },
+        {}
+      );
+
+      // Create a map of user data from users table
+      const usersMap = (usersData || []).reduce(
+        (map: Record<string, any>, userData: any) => {
+          map[userData.id] = userData;
+          return map;
+        },
+        {}
+      );
+
+      // Transform data to match Post interface - be more lenient with missing data
+      const formattedPosts: Post[] = socialPosts
+        .map((post: any) => {
+          console.log("Processing post:", post.id);
+
+          try {
+            const goal = goalsMap[post.goal_id];
+            const goalLog = goalLogsMap[post.goal_log_id];
+
+            // Get the user who created this post from the users table
+            const postUser = usersMap[post.user_id];
+
+            console.log("Post user data:", postUser);
+
+            // Even if we're missing some data, still create a post with defaults
+            // This ensures we show something even if data is incomplete
+
+            // Default values for required fields
+            const defaultImageUrl = "https://via.placeholder.com/400";
+            const defaultUserName = "User";
+            const defaultUserPic = "https://via.placeholder.com/150";
+            const defaultGoalName = "Goal";
+
+            // Calculate week number from goal start date
+            let weekNumber = 1;
+            try {
+              if (goal && goal.start_date) {
+                const startDate = new Date(goal.start_date);
+                const postDate = new Date(post.created_at);
+                const diffTime = Math.abs(
+                  postDate.getTime() - startDate.getTime()
+                );
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                weekNumber = Math.ceil(diffDays / 7);
+              } else if (goalLog && goalLog.week) {
+                // Try to get week from goal log if available
+                weekNumber = parseInt(goalLog.week.replace(/\D/g, "")) || 1;
+              }
+            } catch (err) {
+              console.error("Error calculating week number:", err);
+            }
+
+            // Parse music track data
+            const { songName, artistName, audioUrl, coverUrl } =
+              processMusicTrack(post.music_track);
+
+            // Get the best available user data from the users table
+            const userName = postUser?.name || defaultUserName;
+
+            // Process the profile picture URL correctly
+            let userProfilePic = defaultUserPic;
+
+            if (postUser?.profile_pic_url) {
+              // If it's already a full URL from Supabase storage, use it directly
+              if (
+                postUser.profile_pic_url.includes(
+                  "gyigpabcwedkwkfaxuxp.supabase.co"
+                )
+              ) {
+                userProfilePic = postUser.profile_pic_url;
+              }
+              // If it's a valid URL from an OAuth provider (Google, Apple, etc.), use it directly
+              else if (postUser.profile_pic_url.startsWith("http")) {
+                userProfilePic = postUser.profile_pic_url;
+              }
+              // Otherwise assume it's a filename in the avatars bucket
+              else {
+                userProfilePic = `https://gyigpabcwedkwkfaxuxp.supabase.co/storage/v1/object/public/avatars/${postUser.profile_pic_url}`;
+              }
+            } else if (postUser?.name) {
+              // If user has a name, use first initial for avatar
+              const initial = postUser.name.charAt(0).toUpperCase();
+              // Get a UI Avatars URL with the initial
+              userProfilePic = `https://ui-avatars.com/api/?name=${initial}&background=0E96FF&color=fff&size=256`;
+            } else if (postUser?.email) {
+              // If user has email, use first initial of email
+              const initial = postUser.email.charAt(0).toUpperCase();
+              userProfilePic = `https://ui-avatars.com/api/?name=${initial}&background=0E96FF&color=fff&size=256`;
+            }
+
+            // Default flow state since it's not in the users table
+            const userFlowState = "still";
+
+            // Get the best available caption - prioritize the post caption
+            const captionText = post.caption || "";
+
+            console.log("Caption for post:", post.id, "is:", post.caption);
+
+            // Create the formatted post with proper type casting
+            const formattedPost: Post = {
+              id: post.id,
+              user: {
+                name: userName,
+                profilePic: userProfilePic,
+                flowState: userFlowState as
+                  | "still"
+                  | "kindling"
+                  | "flowing"
+                  | "glowing",
+              },
+              imageUrl: post.image_url || defaultImageUrl,
+              goal: {
+                type: (goal?.type || goalLog?.goal_type || "solo") as
+                  | "solo"
+                  | "group",
+                name: goal?.name || goal?.title || defaultGoalName,
+                message: goal?.message || "",
+                week: weekNumber,
+                date: new Date(post.created_at).toLocaleDateString(),
+              },
+              song: {
+                name: songName,
+                artist: artistName,
+                coverUrl: coverUrl,
+                audioUrl: audioUrl,
+              },
+              likes: 0,
+              caption: captionText,
+              comments: 0,
+              timestamp: post.created_at,
+            };
+
+            return formattedPost;
+          } catch (err) {
+            console.error("Error formatting post:", post.id, err);
+            return null;
+          }
+        })
+        .filter((post): post is Post => post !== null);
+
+      console.log("Formatted posts:", formattedPosts.length);
+
+      // Update state with formatted posts
+      setPosts(formattedPosts);
+
+      // Update storyPulseAnim with the correct number of animation values
+      storyPulseAnim.length = formattedPosts.length;
+      for (let i = 0; i < formattedPosts.length; i++) {
+        if (!storyPulseAnim[i]) {
+          storyPulseAnim[i] = new Animated.Value(1) as any;
+        }
+      }
+    } catch (error: any) {
+      console.error("Error fetching posts:", error);
+      setError(error.message || "Failed to load posts");
+    } finally {
+      setIsLoadingPosts(false);
+    }
+  };
+
+  // Fetch posts on initial load
+  useEffect(() => {
+    // Check if the social_posts table exists
+    checkSocialPostsTable();
+
+    // Then fetch posts if user is available
+    if (user) {
+      fetchPosts();
+    }
+  }, [user]); // Add user as a dependency so this effect runs when user becomes available
+
+  // Function to check if the social_posts table exists and has data
+  const checkSocialPostsTable = async () => {
+    try {
+      console.log("Checking social_posts table...");
+
+      // Skip if no user is logged in yet
+      if (!user) {
+        console.log("No user logged in yet, skipping social_posts table check");
+        return;
+      }
+
+      // First check if the table exists by trying to select a single row
+      const { data: tableCheck, error: tableError } = await supabase
+        .from("social_posts")
+        .select("id")
+        .limit(1);
+
+      if (tableError) {
+        console.error("Error checking social_posts table:", tableError);
+        return;
+      }
+
+      console.log("social_posts table exists, checking for data...");
+
+      // First, get the user's friends list
+      const { data: friendsData, error: friendsError } = await supabase
+        .from("friendships")
+        .select("user_id, friend_id")
+        .or(`user_id.eq.${user.id},friend_id.eq.${user.id}`)
+        .eq("status", "accepted");
+
+      if (friendsError) {
+        console.error("Error fetching friends:", friendsError);
+        return;
+      }
+
+      console.log("Found", friendsData?.length || 0, "friendships");
+
+      // Extract friend IDs from the friendships data
+      const friendIds =
+        friendsData?.map((friendship) =>
+          friendship.user_id === user.id
+            ? friendship.friend_id
+            : friendship.user_id
+        ) || [];
+
+      // Only show posts from friends, not from the user themselves
+      const relevantUserIds = [...friendIds];
+
+      console.log("Checking posts from these users:", relevantUserIds);
+
+      // Now check how many rows are in the table from friends and self
+      const { count, error: countError } = await supabase
+        .from("social_posts")
+        .select("*", { count: "exact", head: true })
+        .in("user_id", relevantUserIds);
+
+      if (countError) {
+        console.error("Error counting social_posts:", countError);
+        return;
+      }
+
+      console.log(`social_posts table has ${count} posts from friends`);
+
+      // No need to create sample posts since we're only showing friends' posts
+    } catch (error) {
+      console.error("Error in checkSocialPostsTable:", error);
+    }
+  };
+
   // Fetch friend requests when user changes
   useEffect(() => {
     if (user) {
@@ -263,8 +670,22 @@ export default function SocialScreen() {
         )
         .subscribe();
 
+      // Subscribe to real-time updates for social posts
+      const postsChannel = supabase
+        .channel("public:social_posts")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "social_posts" },
+          (payload) => {
+            // Refresh posts when there are changes
+            fetchPosts();
+          }
+        )
+        .subscribe();
+
       return () => {
         supabase.removeChannel(channel);
+        supabase.removeChannel(postsChannel);
       };
     }
   }, [user?.id]);
@@ -366,6 +787,9 @@ export default function SocialScreen() {
 
   // Handle refresh completion
   const completeRefresh = () => {
+    // Fetch fresh data
+    fetchPosts();
+
     // Stop the spinner animation if it's running
     if (spinnerAnimationRef.current) {
       spinnerAnimationRef.current.stop();
@@ -503,7 +927,7 @@ export default function SocialScreen() {
   ): void => {
     // Get the current offset
     const offsetY = event.nativeEvent.contentOffset.y;
-    const maxScrollPosition = (POSTS.length - 1) * itemHeight;
+    const maxScrollPosition = (posts.length - 1) * itemHeight;
 
     // Check for pull-to-refresh on release
     if (offsetY < 0) {
@@ -559,10 +983,10 @@ export default function SocialScreen() {
 
     // Don't allow scrolling past the last item
     if (offsetY > maxScrollPosition) {
-      if (POSTS.length > 0) {
+      if (posts.length > 0) {
         // Ensure we have posts before scrolling
         flatListRef.current?.scrollToIndex({
-          index: POSTS.length - 1,
+          index: posts.length - 1,
           animated: true,
         });
       }
@@ -576,7 +1000,7 @@ export default function SocialScreen() {
     // This makes it easier to trigger a page change with a smaller swipe gesture
     const newIndex = Math.max(
       0,
-      Math.min(Math.round(rawIndex), POSTS.length - 1)
+      Math.min(Math.round(rawIndex), posts.length - 1)
     );
 
     // Reduced threshold for easier swiping (from 10% to 3% of post height)
@@ -586,7 +1010,7 @@ export default function SocialScreen() {
     if (Math.abs(offsetY - newIndex * itemHeight) < threshold) {
       if (
         newIndex >= 0 &&
-        newIndex < POSTS.length &&
+        newIndex < posts.length &&
         newIndex !== currentIndex
       ) {
         // Set flags to prevent interference from other scroll events
@@ -634,11 +1058,11 @@ export default function SocialScreen() {
     const rawIndex = offsetY / itemHeight;
     const newIndex = Math.max(
       0,
-      Math.min(Math.round(rawIndex), POSTS.length - 1)
+      Math.min(Math.round(rawIndex), posts.length - 1)
     );
 
     // Ensure we're within valid bounds for the posts array
-    if (newIndex >= 0 && newIndex < POSTS.length && newIndex !== currentIndex) {
+    if (newIndex >= 0 && newIndex < posts.length && newIndex !== currentIndex) {
       // Set flag to prevent scroll events from interfering
       isScrolling.current = true;
       setScrollState("scrolling");
@@ -699,7 +1123,7 @@ export default function SocialScreen() {
         const calculatedIndex = Math.round(offsetY / itemHeight);
         const boundedIndex = Math.max(
           0,
-          Math.min(calculatedIndex, POSTS.length - 1)
+          Math.min(calculatedIndex, posts.length - 1)
         );
 
         // Only update the index when we're not in a programmatic scroll
@@ -829,6 +1253,135 @@ export default function SocialScreen() {
     );
   };
 
+  // Loading state while fetching posts
+  const renderLoading = () => {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
+        <Text style={{ marginTop: 10, color: theme.colors.text }}>
+          {user ? "Loading posts..." : "Waiting for authentication..."}
+        </Text>
+
+        {!user && (
+          <Text
+            style={{
+              marginTop: 5,
+              color: theme.colors.text,
+              opacity: 0.7,
+              textAlign: "center",
+              paddingHorizontal: 20,
+            }}
+          >
+            Please wait while we authenticate your account. If this persists,
+            try logging out and back in.
+          </Text>
+        )}
+      </View>
+    );
+  };
+
+  // Error state
+  const renderError = () => {
+    return (
+      <View
+        style={{
+          flex: 1,
+          justifyContent: "center",
+          alignItems: "center",
+          padding: 20,
+        }}
+      >
+        <Icon name="AlertCircle" size={50} color="#FF3B30" />
+        <Text
+          style={{
+            marginTop: 10,
+            color: theme.colors.text,
+            textAlign: "center",
+          }}
+        >
+          {error ||
+            (user
+              ? "Something went wrong loading posts"
+              : "Authentication required")}
+        </Text>
+
+        {!user ? (
+          <Text
+            style={{
+              marginTop: 5,
+              color: theme.colors.text,
+              opacity: 0.7,
+              textAlign: "center",
+            }}
+          >
+            Please log in to view social posts
+          </Text>
+        ) : (
+          <TouchableOpacity
+            style={{
+              marginTop: 20,
+              padding: 10,
+              backgroundColor: theme.colors.primary,
+              borderRadius: 8,
+            }}
+            onPress={fetchPosts}
+          >
+            <Text style={{ color: "#fff" }}>Try Again</Text>
+          </TouchableOpacity>
+        )}
+
+        {/* Add a debug button to create a test post */}
+        {user && (
+          <TouchableOpacity
+            style={{
+              marginTop: 10,
+              padding: 10,
+              backgroundColor: "#FF9500",
+              borderRadius: 8,
+            }}
+            onPress={async () => {
+              if (!user) {
+                console.log("No user logged in, can't create test post");
+                return;
+              }
+
+              try {
+                console.log("Creating test post...");
+                const { data, error } = await supabase
+                  .from("social_posts")
+                  .insert([
+                    {
+                      user_id: user.id,
+                      caption:
+                        "Test post created at " +
+                        new Date().toLocaleTimeString(),
+                      image_url: "https://picsum.photos/400/600",
+                      created_at: new Date().toISOString(),
+                    },
+                  ])
+                  .select();
+
+                if (error) {
+                  console.error("Error creating test post:", error);
+                  alert("Error creating test post: " + error.message);
+                } else {
+                  console.log("Test post created:", data);
+                  alert("Test post created!");
+                  fetchPosts();
+                }
+              } catch (err) {
+                console.error("Error in create test post:", err);
+                alert("Unexpected error creating test post");
+              }
+            }}
+          >
+            <Text style={{ color: "#fff" }}>Create Test Post</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
+
   // Calculate the content offset to account for the refresh spinner
   const contentTopOffset = isRefreshing
     ? HEADER_WITH_STATUSBAR + 60 // Add room for the spinner when refreshing
@@ -844,6 +1397,12 @@ export default function SocialScreen() {
         try {
           // Set audio as active when screen comes into focus
           await AudioModule.setIsAudioActiveAsync(true);
+
+          // Fetch posts when screen comes into focus if user is logged in
+          if (user) {
+            console.log("Screen focused with user, fetching posts");
+            fetchPosts();
+          }
         } catch (error) {
           console.error("Error activating audio:", error);
         }
@@ -867,7 +1426,7 @@ export default function SocialScreen() {
           );
         }
       };
-    }, [])
+    }, [user]) // Add user as a dependency
   );
 
   // Add effect to stop music when component unmounts (navigating away)
@@ -886,6 +1445,33 @@ export default function SocialScreen() {
           console.error("Error stopping audio:", err)
         );
       }
+    };
+  }, []);
+
+  // Add a listener for auth state changes
+  useEffect(() => {
+    // Set up auth state listener
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        console.log("Auth state changed:", event);
+
+        // If user signs in, fetch posts
+        if (event === "SIGNED_IN" && session?.user) {
+          console.log("User signed in, fetching posts");
+          fetchPosts();
+        }
+
+        // If user signs out, clear posts
+        if (event === "SIGNED_OUT") {
+          console.log("User signed out, clearing posts");
+          setPosts([]);
+        }
+      }
+    );
+
+    // Clean up listener on unmount
+    return () => {
+      authListener?.subscription?.unsubscribe();
     };
   }, []);
 
@@ -970,27 +1556,326 @@ export default function SocialScreen() {
           bottom: NAVBAR_HEIGHT,
         }}
       >
-        {/* Posts FlatList */}
-        <Animated.FlatList
-          ref={flatListRef}
-          data={POSTS as any}
-          renderItem={renderPost}
-          keyExtractor={(item) => item.id}
-          pagingEnabled
-          showsVerticalScrollIndicator={false}
-          snapToInterval={itemHeight}
-          snapToAlignment="start"
-          decelerationRate={0.85} // Changed from "fast" to a numeric value for more control
-          disableIntervalMomentum={true}
-          onScroll={handleScroll}
-          onScrollEndDrag={handleScrollEndDrag}
-          onMomentumScrollEnd={handleMomentumScrollEnd}
-          scrollEnabled={!touchDisabled}
-          contentContainerStyle={{
-            paddingBottom: POST_PEEK_AMOUNT, // Add bottom padding to account for peeking
-          }}
-          ListFooterComponent={renderFooter}
-        />
+        {isLoadingPosts && posts.length === 0 ? (
+          renderLoading()
+        ) : error ? (
+          renderError()
+        ) : (
+          /* Posts FlatList */
+          <Animated.FlatList
+            ref={flatListRef}
+            data={posts}
+            renderItem={renderPost}
+            keyExtractor={(item) => item.id}
+            pagingEnabled
+            showsVerticalScrollIndicator={false}
+            snapToInterval={itemHeight}
+            snapToAlignment="start"
+            decelerationRate={0.85} // Changed from "fast" to a numeric value for more control
+            disableIntervalMomentum={true}
+            onScroll={handleScroll}
+            onScrollEndDrag={handleScrollEndDrag}
+            onMomentumScrollEnd={handleMomentumScrollEnd}
+            scrollEnabled={!touchDisabled}
+            contentContainerStyle={{
+              paddingBottom: POST_PEEK_AMOUNT, // Add bottom padding to account for peeking
+            }}
+            ListFooterComponent={posts.length > 0 ? renderFooter : null}
+            ListEmptyComponent={
+              <View
+                style={{
+                  flex: 1,
+                  justifyContent: "center",
+                  alignItems: "center",
+                  height: 600,
+                  padding: 20,
+                }}
+              >
+                {/* Show empty state only when user is logged in but has no friends */}
+                {user ? (
+                  <>
+                    {/* Stacked cards illustration */}
+                    <View
+                      style={{
+                        width: "100%",
+                        height: 400,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        marginBottom: 40,
+                      }}
+                    >
+                      {/* Background card */}
+                      <View
+                        style={{
+                          position: "absolute",
+                          width: 260,
+                          height: 320,
+                          backgroundColor: "#2A2A2A",
+                          borderRadius: 24,
+                          transform: [{ rotate: "-6deg" }, { translateX: 30 }],
+                          shadowColor: "#000",
+                          shadowOffset: { width: 0, height: 8 },
+                          shadowOpacity: 0.3,
+                          shadowRadius: 12,
+                          elevation: 5,
+                          overflow: "hidden",
+                        }}
+                      >
+                        {/* Dark overlay */}
+                        <View
+                          style={{
+                            position: "absolute",
+                            width: "100%",
+                            height: "100%",
+                            backgroundColor: "rgba(0,0,0,0.2)",
+                            zIndex: 1,
+                          }}
+                        />
+
+                        {/* Actual image */}
+                        <Image
+                          source={{
+                            uri: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?q=80&w=2070",
+                          }}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            resizeMode: "cover",
+                          }}
+                        />
+                      </View>
+
+                      {/* Middle card */}
+                      <View
+                        style={{
+                          position: "absolute",
+                          width: 260,
+                          height: 320,
+                          backgroundColor: "#2A2A2A",
+                          borderRadius: 24,
+                          transform: [{ rotate: "4deg" }, { translateX: -30 }],
+                          shadowColor: "#000",
+                          shadowOffset: { width: 0, height: 8 },
+                          shadowOpacity: 0.3,
+                          shadowRadius: 12,
+                          elevation: 5,
+                          overflow: "hidden",
+                        }}
+                      >
+                        {/* Dark overlay */}
+                        <View
+                          style={{
+                            position: "absolute",
+                            width: "100%",
+                            height: "100%",
+                            backgroundColor: "rgba(0,0,0,0.2)",
+                            zIndex: 1,
+                          }}
+                        />
+
+                        {/* Actual image */}
+                        <Image
+                          source={{
+                            uri: "https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?q=80&w=2070",
+                          }}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            resizeMode: "cover",
+                          }}
+                        />
+                      </View>
+
+                      {/* Front card */}
+                      <View
+                        style={{
+                          width: 260,
+                          height: 320,
+                          backgroundColor: "#2A2A2A",
+                          borderRadius: 24,
+                          shadowColor: "#000",
+                          shadowOffset: { width: 0, height: 8 },
+                          shadowOpacity: 0.3,
+                          shadowRadius: 12,
+                          elevation: 10,
+                          overflow: "hidden",
+                          zIndex: 3,
+                        }}
+                      >
+                        {/* Actual image */}
+                        <Image
+                          source={{
+                            uri: "https://images.unsplash.com/photo-1571401835393-8c5f35328320?q=80&w=1974",
+                          }}
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            resizeMode: "cover",
+                          }}
+                        />
+
+                        {/* Dark gradient overlay at bottom for text visibility */}
+                        <LinearGradient
+                          colors={["transparent", "rgba(0,0,0,0.7)"]}
+                          style={{
+                            position: "absolute",
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            height: 100,
+                          }}
+                        />
+
+                        {/* User info at bottom */}
+                        <View
+                          style={{
+                            position: "absolute",
+                            bottom: 0,
+                            left: 0,
+                            right: 0,
+                            padding: 16,
+                            flexDirection: "row",
+                            alignItems: "center",
+                          }}
+                        >
+                          <View
+                            style={{
+                              width: 40,
+                              height: 40,
+                              borderRadius: 20,
+                              backgroundColor: "rgba(255,255,255,0.9)",
+                              justifyContent: "center",
+                              alignItems: "center",
+                              marginRight: 12,
+                            }}
+                          >
+                            <Text
+                              style={{
+                                fontWeight: "bold",
+                                color: "#34C759",
+                                fontSize: 16,
+                              }}
+                            >
+                              J
+                            </Text>
+                          </View>
+                          <View>
+                            <Text
+                              style={{
+                                color: "white",
+                                fontWeight: "bold",
+                                fontSize: 16,
+                              }}
+                            >
+                              James
+                            </Text>
+                            <Text
+                              style={{
+                                color: "rgba(255,255,255,0.8)",
+                                fontSize: 14,
+                              }}
+                            >
+                              Daily Run • Week 1
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
+                    </View>
+
+                    {/* Text content */}
+                    <Text
+                      style={{
+                        color: theme.colors.text,
+                        textAlign: "center",
+                        fontSize: 24,
+                        fontFamily: "playfair-display-bold",
+                        marginBottom: 12,
+                      }}
+                    >
+                      When if not today?
+                    </Text>
+
+                    <Text
+                      style={{
+                        color: theme.colors.text,
+                        opacity: 0.7,
+                        textAlign: "center",
+                        marginBottom: 24,
+                        fontSize: 16,
+                        maxWidth: 300,
+                        lineHeight: 24,
+                      }}
+                    >
+                      Connect with friends to see updates from their goals
+                    </Text>
+
+                    {/* Action button */}
+                    <TouchableOpacity
+                      style={{
+                        backgroundColor: "#0E96FF",
+                        paddingHorizontal: 24,
+                        paddingVertical: 14,
+                        borderRadius: 24,
+                        shadowColor: "#000",
+                        shadowOffset: { width: 0, height: 4 },
+                        shadowOpacity: 0.2,
+                        shadowRadius: 8,
+                      }}
+                      onPress={() => {
+                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                        router.push("/add-user");
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color: "white",
+                          fontSize: 16,
+                          fontWeight: "600",
+                        }}
+                      >
+                        Find your friends
+                      </Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  // Login state when user is not logged in
+                  <>
+                    <Icon
+                      name="UserCircle"
+                      size={60}
+                      color={theme.colors.primary}
+                      style={{ marginBottom: 20 }}
+                    />
+                    <Text
+                      style={{
+                        color: theme.colors.text,
+                        textAlign: "center",
+                        fontSize: 24,
+                        fontFamily: "playfair-display-bold",
+                        marginBottom: 12,
+                      }}
+                    >
+                      Sign in to see posts
+                    </Text>
+                    <Text
+                      style={{
+                        color: theme.colors.text,
+                        opacity: 0.7,
+                        textAlign: "center",
+                        marginBottom: 20,
+                        fontSize: 15,
+                        maxWidth: 280,
+                        lineHeight: 22,
+                      }}
+                    >
+                      Please log in to view social posts
+                    </Text>
+                  </>
+                )}
+              </View>
+            }
+          />
+        )}
       </View>
     </View>
   );

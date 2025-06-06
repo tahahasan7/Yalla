@@ -529,6 +529,11 @@ const PostItem = ({
                 </View>
 
                 <View style={styles.goalMessageContainer}>
+                  {/* Display the post caption if available */}
+                  {item.caption && (
+                    <Text style={styles.captionText}>{item.caption}</Text>
+                  )}
+
                   <Text style={styles.goalMessage}>{item.goal.message}</Text>
 
                   <Text style={styles.weekText}>Week {item.goal.week}</Text>
@@ -946,6 +951,11 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "flex-end",
     alignItems: "center",
+  },
+  captionText: {
+    color: "hsla(0, 0.00%, 100.00%, .95)",
+    fontFamily: FontFamily.Regular,
+    fontSize: 15,
   },
 });
 
