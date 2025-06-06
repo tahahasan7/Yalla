@@ -1,4 +1,5 @@
 import { FontFamily } from "@/constants/fonts";
+import { getProfileImage } from "@/hooks/useAuth";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -182,24 +183,36 @@ const FriendsBottomSheet = (props: FriendsBottomSheetProps) => {
 
   // This is the key function to create a fully memoized item renderer
   const renderFriendItem = React.useCallback(
-    ({ item }: { item: Friend }) => (
-      <TouchableOpacity
-        style={[styles.friendItem, item.selected && styles.selectedFriendItem]}
-        onPress={() => toggleFriendSelection(item.id)}
-      >
-        <ProfileAvatar imageUri={item.profile_pic_url} size={40} />
-        <Text style={styles.friendName}>{item.name}</Text>
-        <View style={styles.checkboxContainer}>
-          <View
-            style={[styles.checkbox, item.selected && styles.checkboxSelected]}
-          >
-            {item.selected && (
-              <Ionicons name="checkmark" size={16} color="white" />
-            )}
+    ({ item }: { item: Friend }) => {
+      // Create a user-like object to use with getProfileImage
+      const userObj = { profile_pic_url: item.profile_pic_url };
+      const imageUri = getProfileImage(userObj as any);
+
+      return (
+        <TouchableOpacity
+          style={[
+            styles.friendItem,
+            item.selected && styles.selectedFriendItem,
+          ]}
+          onPress={() => toggleFriendSelection(item.id)}
+        >
+          <ProfileAvatar imageUri={imageUri} size={40} />
+          <Text style={styles.friendName}>{item.name}</Text>
+          <View style={styles.checkboxContainer}>
+            <View
+              style={[
+                styles.checkbox,
+                item.selected && styles.checkboxSelected,
+              ]}
+            >
+              {item.selected && (
+                <Ionicons name="checkmark" size={16} color="white" />
+              )}
+            </View>
           </View>
-        </View>
-      </TouchableOpacity>
-    ),
+        </TouchableOpacity>
+      );
+    },
     [localFriends] // Re-create when friends change
   );
 

@@ -35,13 +35,16 @@ interface QuoteBottomSheetProps {
 const QUOTE_STORAGE_KEY = "daily_quote";
 const QUOTE_DATE_KEY = "daily_quote_date";
 
-// API configuration
+// API configuration - Using multiple API endpoints for better reliability
 const API_CONFIG = {
-  // Direct API endpoint
+  // Primary API endpoint
   baseUrl: "https://api.quotable.io",
-  // Timeout in milliseconds
-  timeout: 8000, // Increased timeout for better reliability
-  // Endpoint for random quotes
+  // Alternative endpoints
+  alternativeUrls: [
+    "https://quotable.io/api",
+    "https://zenquotes.io/api/random", // Alternative API
+  ],
+  timeout: 8000, // Reduced timeout for faster response
   randomQuote: "/random",
 };
 
@@ -52,6 +55,7 @@ const QuoteBottomSheet = ({ visible, onClose }: QuoteBottomSheetProps) => {
   const [quote, setQuote] = useState<Quote | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentApiIndex, setCurrentApiIndex] = useState(0);
 
   // Animation refs
   const dragY = useRef(new Animated.Value(0)).current;
@@ -105,9 +109,35 @@ const QuoteBottomSheet = ({ visible, onClose }: QuoteBottomSheetProps) => {
     }
   };
 
+  // Format quote data from different APIs
+  const formatQuoteData = (data: any, apiIndex: number): Quote => {
+    // Default format for api.quotable.io
+    if (apiIndex === 0) {
+      return data;
+    }
+    // Format for zenquotes.io
+    else if (apiIndex === 2) {
+      return {
+        _id: data[0].q.substring(0, 10),
+        content: data[0].q,
+        author: data[0].a,
+        tags: [],
+      };
+    }
+    // Default fallback
+    return {
+      _id: String(Date.now()),
+      content: data.content || data.quote || "Inspirational quote",
+      author: data.author || "Unknown",
+      tags: data.tags || [],
+    };
+  };
+
   // Fetch a new quote from the API with timeout
-  const fetchNewQuote = async () => {
+  const fetchNewQuote = async (apiIndex = 0) => {
     try {
+      setCurrentApiIndex(apiIndex);
+
       // Create an AbortController to handle timeout
       const controller = new AbortController();
       const timeoutId = setTimeout(
@@ -115,37 +145,55 @@ const QuoteBottomSheet = ({ visible, onClose }: QuoteBottomSheetProps) => {
         API_CONFIG.timeout
       );
 
-      // Using the Quotable API to get a random quote with timeout
-      const response = await fetch(
-        `${API_CONFIG.baseUrl}${API_CONFIG.randomQuote}`,
-        {
-          signal: controller.signal,
-          // Add cache control headers to prevent caching issues
-          headers: {
-            "Cache-Control": "no-cache, no-store, must-revalidate",
-            Pragma: "no-cache",
-            Expires: "0",
-          },
-        }
-      );
+      let url = API_CONFIG.baseUrl + API_CONFIG.randomQuote;
+
+      // Use alternative API if primary failed
+      if (apiIndex === 1) {
+        url = API_CONFIG.alternativeUrls[0] + API_CONFIG.randomQuote;
+      } else if (apiIndex === 2) {
+        url = API_CONFIG.alternativeUrls[1];
+      }
+
+      console.log(`Fetching quote from API (attempt ${apiIndex + 1}):`, url);
+
+      const response = await fetch(url, {
+        signal: controller.signal,
+        // Add cache control headers to prevent caching issues
+        headers: {
+          "Cache-Control": "no-cache, no-store, must-revalidate",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+      });
 
       // Clear the timeout since the request completed
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error(`API request failed: ${response.status}`);
+        throw new Error(`API request failed with status: ${response.status}`);
       }
 
       const data = await response.json();
+      console.log("Quote fetched successfully:", data);
+
+      // Format the data according to the API used
+      const formattedData = formatQuoteData(data, apiIndex);
 
       // Save this as today's quote
-      await saveQuoteAsDaily(data);
+      await saveQuoteAsDaily(formattedData);
 
-      setQuote(data);
+      setQuote(formattedData);
+      setError(null); // Clear any previous errors
     } catch (err: any) {
       console.error("Error fetching quote:", err);
 
-      // Show appropriate error message based on error type
+      // Try the next API endpoint if available
+      if (apiIndex < 2) {
+        console.log(`Trying next API endpoint (${apiIndex + 2})...`);
+        return fetchNewQuote(apiIndex + 1);
+      }
+
+      // All API attempts failed, show error
       if (err.name === "AbortError") {
         setError(
           "Request timed out. Please check your internet connection and try again."
@@ -155,13 +203,15 @@ const QuoteBottomSheet = ({ visible, onClose }: QuoteBottomSheetProps) => {
         err.message.includes("Network request failed")
       ) {
         setError(
-          "Network request failed. Please check your internet connection."
+          "Network request failed. Please check your internet connection and try again."
         );
       } else {
-        setError(`Failed to load quote from API: ${err.message}`);
+        setError(`Failed to load quote: ${err.message}`);
       }
     } finally {
-      setLoading(false);
+      if (apiIndex === 2) {
+        setLoading(false);
+      }
     }
   };
 
@@ -256,7 +306,9 @@ const QuoteBottomSheet = ({ visible, onClose }: QuoteBottomSheetProps) => {
 
   // Retry fetching quote when there's an error
   const handleRetry = () => {
-    fetchNewQuote();
+    // Reset to first API endpoint on manual retry
+    setCurrentApiIndex(0);
+    fetchNewQuote(0);
   };
 
   // Render content based on loading/error state

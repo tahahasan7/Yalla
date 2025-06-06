@@ -1,5 +1,5 @@
 import { FontFamily } from "@/constants/fonts";
-import { useAuth } from "@/hooks/useAuth";
+import { getProfileImage, useAuth } from "@/hooks/useAuth";
 import { friendService } from "@/services/friendService";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
@@ -21,9 +21,13 @@ interface FriendsSectionProps {
 
 // Simple Friend Avatar component without animation
 const FriendAvatar = ({ avatar }: { avatar: string }) => {
+  // Create a user-like object to use with getProfileImage
+  const userObj = { profile_pic_url: avatar };
+  const imageUri = getProfileImage(userObj as any);
+
   return (
     <View style={styles.previewAvatarContainer}>
-      <ProfileAvatar imageUri={avatar} size={30} />
+      <ProfileAvatar imageUri={imageUri} size={30} />
     </View>
   );
 };

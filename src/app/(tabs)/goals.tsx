@@ -221,6 +221,19 @@ export default function GoalsScreen() {
   const HEADER_HEIGHT = 76;
   const HEADER_WITH_STATUSBAR = HEADER_HEIGHT + insets.top;
 
+  // Create Goal button component - extracted for reuse
+  const CreateGoalButton = () => (
+    <TouchableOpacity
+      style={styles.createGoalButton}
+      onPress={() => {
+        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        router.push("/create-goal");
+      }}
+    >
+      <Text style={styles.createGoalButtonText}>Create Goal</Text>
+    </TouchableOpacity>
+  );
+
   // Render header with user profile, title, and buttons
   const renderHeader = () => {
     return (
@@ -309,21 +322,13 @@ export default function GoalsScreen() {
       );
     }
 
-    if (goals.length === 0 && !loading) {
+    if (goals.length === 0) {
       return (
         <View style={styles.centeredContainer}>
           <Text style={styles.messageText}>
             No goals yet. Create your first goal!
           </Text>
-          <TouchableOpacity
-            style={styles.createGoalButton}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              router.push("/create-goal");
-            }}
-          >
-            <Text style={styles.createGoalButtonText}>Create Goal</Text>
-          </TouchableOpacity>
+          <CreateGoalButton />
         </View>
       );
     }
@@ -332,6 +337,8 @@ export default function GoalsScreen() {
       return (
         <View style={styles.centeredContainer}>
           <Text style={styles.messageText}>No goals in this category</Text>
+          <View style={styles.spacer} />
+          <CreateGoalButton />
         </View>
       );
     }
@@ -650,6 +657,12 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: "#0E96FF",
     borderRadius: 20,
+    zIndex: 100,
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 3,
   },
   createGoalButtonText: {
     color: "white",
@@ -666,5 +679,8 @@ const styles = StyleSheet.create({
     height: 8,
     borderWidth: 1,
     borderColor: "#FFFFFF",
+  },
+  spacer: {
+    height: 10,
   },
 });
