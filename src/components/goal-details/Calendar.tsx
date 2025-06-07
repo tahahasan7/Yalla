@@ -1,7 +1,14 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { FontFamily } from "../../constants/fonts";
 import { GoalLogItem } from "../../services/goalService";
+
+// User data interface
+interface UserData {
+  id: string;
+  name?: string;
+  profile_pic_url?: string;
+}
 
 interface CalendarProps {
   sortedMonths?: [string, GoalLogItem[]][];
@@ -9,6 +16,7 @@ interface CalendarProps {
   onDayPress: (day: GoalLogItem | GoalLogItem[], dayKey: string) => void;
   registerDayRef: (key: string, ref: View | null) => void;
   isGroupGoal?: boolean;
+  usersCache?: Record<string, UserData>;
 }
 
 const Calendar: React.FC<CalendarProps> = ({
@@ -17,6 +25,7 @@ const Calendar: React.FC<CalendarProps> = ({
   onDayPress,
   registerDayRef,
   isGroupGoal = false,
+  usersCache = {},
 }) => {
   // Group logs by month
   const groupLogsByMonth = (logs: GoalLogItem[]) => {
@@ -147,6 +156,17 @@ const Calendar: React.FC<CalendarProps> = ({
                     const dayKey = `day-${month}-${dayPosition}`;
                     const hasMultiplePosts = dayLogs && dayLogs.length > 1;
 
+                    // Check if multiple users posted on this day
+                    const uniqueUsers = useMemo(() => {
+                      if (!dayLogs) return new Set<string>();
+                      return new Set(dayLogs.map((log) => log.user_id));
+                    }, [dayLogs]);
+
+                    const hasMultipleUsers = uniqueUsers.size > 1;
+                    const multiUserClass = hasMultipleUsers
+                      ? styles.multiUserDay
+                      : {};
+
                     return (
                       <TouchableOpacity
                         ref={(ref) => {
@@ -164,7 +184,12 @@ const Calendar: React.FC<CalendarProps> = ({
                         }}
                       >
                         {dayLogs ? (
-                          <View style={styles.calendarDayWithImage}>
+                          <View
+                            style={[
+                              styles.calendarDayWithImage,
+                              multiUserClass,
+                            ]}
+                          >
                             <Image
                               source={{ uri: dayLogs[0].image_url }}
                               style={styles.calendarDayImage}
@@ -175,19 +200,84 @@ const Calendar: React.FC<CalendarProps> = ({
                                 {dayPosition}
                               </Text>
 
-                              {/* Only show who posted for group goals */}
+                              {/* Show user indicators for group goals */}
                               {isGroupGoal && (
                                 <View style={styles.posterIndicator}>
-                                  {/* For demo - we'd replace with actual user data */}
-                                  <View
-                                    style={styles.posterAvatarPlaceholder}
-                                  />
-                                  {hasMultiplePosts && (
-                                    <View style={styles.multiplePostsIndicator}>
-                                      <Text style={styles.multiplePostsText}>
-                                        +{dayLogs.length - 1}
-                                      </Text>
-                                    </View>
+                                  {/* Display avatars for unique users */}
+                                  {hasMultipleUsers ? (
+                                    // Show first user with indicator for more
+                                    <>
+                                      {Array.from(uniqueUsers)
+                                        .slice(0, 1)
+                                        .map((userId) => (
+                                          <View
+                                            key={userId}
+                                            style={styles.userAvatarContainer}
+                                          >
+                                            {usersCache[userId]
+                                              ?.profile_pic_url ? (
+                                              <Image
+                                                source={{
+                                                  uri: usersCache[userId]
+                                                    ?.profile_pic_url,
+                                                }}
+                                                style={styles.posterAvatar}
+                                              />
+                                            ) : (
+                                              <View
+                                                style={
+                                                  styles.posterAvatarPlaceholder
+                                                }
+                                              />
+                                            )}
+                                          </View>
+                                        ))}
+                                      <View
+                                        style={styles.multipleUsersIndicator}
+                                      >
+                                        <Text style={styles.multiplePostsText}>
+                                          +{uniqueUsers.size - 1}
+                                        </Text>
+                                      </View>
+                                    </>
+                                  ) : (
+                                    // Single user posted (possibly multiple times)
+                                    <>
+                                      {dayLogs[0].user_id && (
+                                        <View
+                                          style={styles.userAvatarContainer}
+                                        >
+                                          {usersCache[dayLogs[0].user_id]
+                                            ?.profile_pic_url ? (
+                                            <Image
+                                              source={{
+                                                uri: usersCache[
+                                                  dayLogs[0].user_id
+                                                ]?.profile_pic_url,
+                                              }}
+                                              style={styles.posterAvatar}
+                                            />
+                                          ) : (
+                                            <View
+                                              style={
+                                                styles.posterAvatarPlaceholder
+                                              }
+                                            />
+                                          )}
+                                        </View>
+                                      )}
+                                      {hasMultiplePosts && (
+                                        <View
+                                          style={styles.multiplePostsIndicator}
+                                        >
+                                          <Text
+                                            style={styles.multiplePostsText}
+                                          >
+                                            +{dayLogs.length - 1}
+                                          </Text>
+                                        </View>
+                                      )}
+                                    </>
                                   )}
                                 </View>
                               )}
@@ -262,6 +352,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     position: "relative",
   },
+  multiUserDay: {
+    borderWidth: 2,
+    borderColor: "#0E96FF",
+  },
   calendarDayImage: {
     width: "100%",
     height: "100%",
@@ -303,6 +397,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
   },
+  userAvatarContainer: {
+    marginRight: -6,
+    zIndex: 1,
+  },
   posterAvatar: {
     width: 20,
     height: 20,
@@ -325,7 +423,18 @@ const styles = StyleSheet.create({
     backgroundColor: "#007AFF",
     justifyContent: "center",
     alignItems: "center",
-    marginLeft: -8,
+    marginLeft: -4,
+    borderWidth: 1,
+    borderColor: "white",
+  },
+  multipleUsersIndicator: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#FF6B00", // Different color for multiple users
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: -4,
     borderWidth: 1,
     borderColor: "white",
   },

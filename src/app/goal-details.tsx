@@ -6,7 +6,13 @@ import {
 } from "@react-navigation/native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Dimensions,
@@ -28,23 +34,42 @@ import { useColorScheme } from "../hooks/useColorScheme";
 // Import the goals service
 import { GoalLogItem, goalService } from "../services/goalService";
 
+// Types
+interface ProcessedData {
+  sortedMonths: [string, GoalLogItem[]][];
+  sortedMonthsWithSortedDays: [string, GoalLogItem[]][];
+}
+
+interface UserData {
+  id: string;
+  name?: string;
+  profile_pic_url?: string;
+}
+
+interface ImagePosition {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
 // Custom flow state icon without background
-const FlowStateIconNoBackground = ({
-  flowState,
-  size = 26,
-}: {
-  flowState: "still" | "kindling" | "flowing" | "glowing";
-  size?: number;
-}) => {
-  return (
+const FlowStateIconNoBackground = React.memo(
+  ({
+    flowState,
+    size = 26,
+  }: {
+    flowState: "still" | "kindling" | "flowing" | "glowing";
+    size?: number;
+  }) => (
     <View style={styles.flowStateIcon}>
       <Icon
         name={flowState.charAt(0).toUpperCase() + flowState.slice(1)}
         size={size}
       />
     </View>
-  );
-};
+  )
+);
 
 export default function GoalDetailsScreen() {
   const navigation = useNavigation();
@@ -63,10 +88,10 @@ export default function GoalDetailsScreen() {
   // State for goal logs
   const [goalLogs, setGoalLogs] = useState<GoalLogItem[]>([]);
   // Add new state for pre-processed data
-  const [processedData, setProcessedData] = useState<{
-    sortedMonths: [string, GoalLogItem[]][];
-    sortedMonthsWithSortedDays: [string, GoalLogItem[]][];
-  }>({ sortedMonths: [], sortedMonthsWithSortedDays: [] });
+  const [processedData, setProcessedData] = useState<ProcessedData>({
+    sortedMonths: [],
+    sortedMonthsWithSortedDays: [],
+  });
   const [isLoading, setIsLoading] = useState(true);
 
   // State variables for the image modal
@@ -74,14 +99,14 @@ export default function GoalDetailsScreen() {
     GoalLogItem | GoalLogItem[] | null
   >(null);
   const [modalVisible, setModalVisible] = useState(false);
-  const [imagePosition, setImagePosition] = useState({
+  const [imagePosition, setImagePosition] = useState<ImagePosition>({
     x: 0,
     y: 0,
     width: 0,
     height: 0,
   });
 
-  const dayRefs = useRef<{ [key: string]: View | null }>({}).current;
+  const dayRefs = useRef<Record<string, View | null>>({}).current;
   const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } =
     Dimensions.get("window");
 
@@ -93,32 +118,45 @@ export default function GoalDetailsScreen() {
   const goalId = params.id as string;
 
   // Parse goal data from params
-  const goal = {
-    id: params.id as string,
-    title: params.title as string,
-    color: params.color as string,
-    icon: params.icon as string,
-    flowState: params.flowState as "still" | "kindling" | "flowing" | "glowing",
-    frequency: params.frequency as string,
-    duration: params.duration as string,
-    lastImage: params.lastImage as string | undefined,
-    lastImageDate: params.lastImageDate as string | undefined,
-    progress: params.progress ? parseInt(params.progress as string) : undefined,
-    completed: params.completed === "true",
-    completedDate: params.completedDate as string | undefined,
-    goalType: params.goalType as "solo" | "group" | undefined,
-    participants: undefined,
-  };
+  const goal = useMemo(
+    () => ({
+      id: params.id as string,
+      title: params.title as string,
+      color: params.color as string,
+      icon: params.icon as string,
+      flowState: params.flowState as
+        | "still"
+        | "kindling"
+        | "flowing"
+        | "glowing",
+      frequency: params.frequency as string,
+      duration: params.duration as string,
+      lastImage: params.lastImage as string | undefined,
+      lastImageDate: params.lastImageDate as string | undefined,
+      progress: params.progress
+        ? parseInt(params.progress as string)
+        : undefined,
+      completed: params.completed === "true",
+      completedDate: params.completedDate as string | undefined,
+      goalType: params.goalType as "solo" | "group" | undefined,
+      participants: undefined,
+    }),
+    [params]
+  );
 
   // Check if this is a group goal
   const isGroupGoal = goal.goalType === "group";
 
   // Capitalize flow state for display
-  const flowStateCapitalized =
-    goal.flowState.charAt(0).toUpperCase() + goal.flowState.slice(1);
+  const flowStateCapitalized = useMemo(
+    () => goal.flowState.charAt(0).toUpperCase() + goal.flowState.slice(1),
+    [goal.flowState]
+  );
 
   // Add user prefetching state
-  const [usersForGoal, setUsersForGoal] = useState<{ [key: string]: any }>({});
+  const [usersForGoal, setUsersForGoal] = useState<Record<string, UserData>>(
+    {}
+  );
   const [isUserDataLoaded, setIsUserDataLoaded] = useState(false);
 
   // Fetch user data for all logs upfront
@@ -158,7 +196,7 @@ export default function GoalDetailsScreen() {
         const results = await Promise.all(userPromises);
 
         // Build user cache
-        const userCache: { [key: string]: any } = {};
+        const userCache: Record<string, UserData> = {};
         results.forEach(({ userId, userData }) => {
           if (userData) {
             userCache[userId] = userData;
@@ -177,7 +215,63 @@ export default function GoalDetailsScreen() {
     }
   }, []);
 
-  // Update the fetch goal logs useEffect to prefetch user data
+  // Process log data
+  const processGoalLogs = useCallback((data: GoalLogItem[]) => {
+    if (data.length === 0)
+      return { sortedMonths: [], sortedMonthsWithSortedDays: [] };
+
+    // Group timeline items by month
+    const groupedByMonth = data.reduce(
+      (groups: Record<string, GoalLogItem[]>, item) => {
+        const month = item.month || "";
+        if (!groups[month]) {
+          groups[month] = [];
+        }
+        groups[month].push(item);
+        return groups;
+      },
+      {}
+    );
+
+    // Sort months in reverse chronological order
+    const sortedMonths = Object.entries(groupedByMonth).sort((a, b) => {
+      const yearA = parseInt(a[0].split(" ")[1]);
+      const yearB = parseInt(b[0].split(" ")[1]);
+      const monthA = a[0].split(" ")[0];
+      const monthB = b[0].split(" ")[0];
+      const monthNames = [
+        "January",
+        "February",
+        "March",
+        "April",
+        "May",
+        "June",
+        "July",
+        "August",
+        "September",
+        "October",
+        "November",
+        "December",
+      ];
+      const monthNumA = monthNames.indexOf(monthA);
+      const monthNumB = monthNames.indexOf(monthB);
+
+      return yearA !== yearB ? yearB - yearA : monthNumB - monthNumA;
+    });
+
+    // Sort days within each month
+    const sortedMonthsWithSortedDays = sortedMonths.map(([month, items]) => {
+      const sortedItems = [...items].sort(
+        (a, b) =>
+          new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+      return [month, sortedItems] as [string, GoalLogItem[]];
+    });
+
+    return { sortedMonths, sortedMonthsWithSortedDays };
+  }, []);
+
+  // Fetch goal logs
   useEffect(() => {
     const fetchGoalLogs = async () => {
       setIsLoading(true);
@@ -195,77 +289,12 @@ export default function GoalDetailsScreen() {
 
           setGoalLogs(data);
 
-          // Prefetch user data for all logs
+          // Process data and update state
+          const processed = processGoalLogs(data);
+          setProcessedData(processed);
+
+          // Prefetch user data
           await prefetchUserData(data);
-
-          // Process data for both views at once to avoid reprocessing on toggle
-          if (data.length > 0) {
-            // Group timeline items by month
-            const groupedByMonth: Record<string, GoalLogItem[]> = data.reduce(
-              (groups: Record<string, GoalLogItem[]>, item: GoalLogItem) => {
-                const month = item.month || "";
-                if (!groups[month]) {
-                  groups[month] = [];
-                }
-                groups[month].push(item);
-                return groups;
-              },
-              {}
-            );
-
-            // Sort months in reverse chronological order (latest first)
-            const sortedMonths = Object.entries(groupedByMonth).sort((a, b) => {
-              // Extract year from month string (e.g., "December 2025" -> 2025)
-              const yearA = parseInt(a[0].split(" ")[1]);
-              const yearB = parseInt(b[0].split(" ")[1]);
-
-              // Extract month from month string (e.g., "December 2025" -> December)
-              const monthA = a[0].split(" ")[0];
-              const monthB = b[0].split(" ")[0];
-
-              // Convert month names to numbers for comparison
-              const monthNames = [
-                "January",
-                "February",
-                "March",
-                "April",
-                "May",
-                "June",
-                "July",
-                "August",
-                "September",
-                "October",
-                "November",
-                "December",
-              ];
-              const monthNumA = monthNames.indexOf(monthA);
-              const monthNumB = monthNames.indexOf(monthB);
-
-              // Compare years first, then months
-              if (yearA !== yearB) {
-                return yearB - yearA; // Latest year first
-              }
-              return monthNumB - monthNumA; // Latest month first
-            });
-
-            // Sort days within each month in reverse chronological order (latest first)
-            const sortedMonthsWithSortedDays: [string, GoalLogItem[]][] =
-              sortedMonths.map(([month, items]) => {
-                // Sort items by created_at timestamp in reverse chronological order
-                const sortedItems = [...items].sort(
-                  (a, b) =>
-                    new Date(b.created_at).getTime() -
-                    new Date(a.created_at).getTime()
-                );
-                return [month, sortedItems] as [string, GoalLogItem[]];
-              });
-
-            // Store the processed data
-            setProcessedData({
-              sortedMonths,
-              sortedMonthsWithSortedDays,
-            });
-          }
         } catch (error) {
           console.error("Error fetching goal logs:", error);
         } finally {
@@ -275,15 +304,15 @@ export default function GoalDetailsScreen() {
     };
 
     fetchGoalLogs();
-  }, [goalId, prefetchUserData]);
+  }, [goalId, prefetchUserData, processGoalLogs]);
 
   // Toggle between grid and list view
-  const toggleViewMode = () => {
-    setIsGridView(!isGridView);
-  };
+  const toggleViewMode = useCallback(() => {
+    setIsGridView((prev) => !prev);
+  }, []);
 
   // Toggle flow info modal and position it
-  const toggleFlowInfo = () => {
+  const toggleFlowInfo = useCallback(() => {
     if (!showFlowInfo && flowButtonRef.current) {
       // Get the position of the button for proper popup placement
       flowButtonRef.current.measure(
@@ -299,8 +328,8 @@ export default function GoalDetailsScreen() {
         }
       );
     }
-    setShowFlowInfo(!showFlowInfo);
-  };
+    setShowFlowInfo((prev) => !prev);
+  }, [showFlowInfo]);
 
   // Calculate screen width for the calendar
   const screenWidth = Dimensions.get("window").width;
@@ -321,57 +350,63 @@ export default function GoalDetailsScreen() {
   }, [navigation, isNavigating]);
 
   // Function to show the day popup
-  const showDayModal = (day: GoalLogItem | GoalLogItem[], dayKey: string) => {
-    // If we have multiple logs, use the first one as default
-    const selectedLogItem = Array.isArray(day) ? day[0] : day;
+  const showDayModal = useCallback(
+    (day: GoalLogItem | GoalLogItem[], dayKey: string) => {
+      // If we have multiple logs, use the first one as default
+      const selectedLogItem = Array.isArray(day) ? day[0] : day;
 
-    // Store the selected day data
-    setSelectedDay(day);
+      // Store the selected day data
+      setSelectedDay(day);
 
-    // Find the position of the pressed day cell
-    if (dayRefs[dayKey]) {
-      dayRefs[dayKey]?.measure(
-        (
-          _x: number,
-          _y: number,
-          width: number,
-          height: number,
-          pageX: number,
-          pageY: number
-        ) => {
-          // Store the original image position
-          setImagePosition({
-            x: pageX,
-            y: pageY,
-            width,
-            height,
-          });
+      // Find the position of the pressed day cell
+      if (dayRefs[dayKey]) {
+        dayRefs[dayKey]?.measure(
+          (
+            _x: number,
+            _y: number,
+            width: number,
+            height: number,
+            pageX: number,
+            pageY: number
+          ) => {
+            // Store the original image position
+            setImagePosition({
+              x: pageX,
+              y: pageY,
+              width,
+              height,
+            });
 
-          // Show the modal
-          setModalVisible(true);
-        }
-      );
-    }
-  };
+            // Show the modal
+            setModalVisible(true);
+          }
+        );
+      }
+    },
+    [dayRefs]
+  );
 
   // Function to hide the day modal
-  const hideModal = () => {
+  const hideModal = useCallback(() => {
     setModalVisible(false);
     setSelectedDay(null);
-  };
+  }, []);
 
   // Function to register refs from child components
-  const registerDayRef = (key: string, ref: View | null) => {
-    dayRefs[key] = ref;
-  };
+  const registerDayRef = useCallback(
+    (key: string, ref: View | null) => {
+      dayRefs[key] = ref;
+    },
+    [dayRefs]
+  );
 
   // Handle back button press to navigate to goals tab
-  const handleBackPress = () => {
+  const handleBackPress = useCallback(() => {
     router.back();
-  };
+  }, [router]);
 
   // Handle camera button press
-  const handleCameraPress = () => {
+  const handleCameraPress = useCallback(() => {
     // Prevent rapid navigation
     if (isNavigating) return;
 
@@ -398,31 +433,65 @@ export default function GoalDetailsScreen() {
     setTimeout(() => {
       setIsNavigating(false);
     }, 500);
-  };
+  }, [goal, isNavigating, router]);
 
   // Check for goal flow state
   useEffect(() => {
     const fetchFlowState = async () => {
       if (goalId && user?.id) {
         try {
-          const { data, error } = await goalService.getGoalFlowState(
-            goalId,
-            user.id
-          );
-          if (error) {
-            console.error("Error fetching flow state:", error);
-            return;
-          }
-          // We could update the goal's flow state here if needed
+          await goalService.getGoalFlowState(goalId, user.id);
+          // Flow state is fetched but not used in this component currently
         } catch (err) {
-          console.error("Network error fetching flow state:", err);
-          // Just continue with the current flow state
+          console.error("Error fetching flow state:", err);
         }
       }
     };
 
     fetchFlowState();
   }, [goalId, user?.id]);
+
+  // Render content based on loading and data state
+  const renderContent = () => {
+    if (isLoading) {
+      return (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={styles.loadingText}>Loading your progress...</Text>
+        </View>
+      );
+    }
+
+    if (goalLogs.length === 0) {
+      return (
+        <View style={styles.emptyGridContainer}>
+          <Text style={styles.emptyStateText}>
+            No logs yet. Tap the + button to add your progress!
+          </Text>
+        </View>
+      );
+    }
+
+    return isGridView ? (
+      <Calendar
+        goalLogs={goalLogs}
+        sortedMonths={processedData.sortedMonths}
+        onDayPress={showDayModal}
+        registerDayRef={registerDayRef}
+        isGroupGoal={isGroupGoal}
+        usersCache={usersForGoal}
+      />
+    ) : (
+      <Timeline
+        sortedMonthsWithSortedDays={processedData.sortedMonthsWithSortedDays}
+        onDayPress={showDayModal}
+        registerDayRef={registerDayRef}
+        isGroupGoal={isGroupGoal}
+        usersCache={usersForGoal}
+        isUserDataLoaded={isUserDataLoaded}
+      />
+    );
+  };
 
   return (
     <View
@@ -630,37 +699,7 @@ export default function GoalDetailsScreen() {
         style={styles.scrollContent}
         contentContainerStyle={styles.scrollContentContainer}
       >
-        {isLoading ? (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#fff" />
-            <Text style={styles.loadingText}>Loading your progress...</Text>
-          </View>
-        ) : goalLogs.length === 0 ? (
-          <View style={styles.emptyGridContainer}>
-            <Text style={styles.emptyStateText}>
-              No logs yet. Tap the + button to add your progress!
-            </Text>
-          </View>
-        ) : isGridView ? (
-          <Calendar
-            goalLogs={goalLogs}
-            sortedMonths={processedData.sortedMonths}
-            onDayPress={showDayModal}
-            registerDayRef={registerDayRef}
-            isGroupGoal={isGroupGoal}
-          />
-        ) : (
-          <Timeline
-            sortedMonthsWithSortedDays={
-              processedData.sortedMonthsWithSortedDays
-            }
-            onDayPress={showDayModal}
-            registerDayRef={registerDayRef}
-            isGroupGoal={isGroupGoal}
-            usersCache={usersForGoal}
-            isUserDataLoaded={isUserDataLoaded}
-          />
-        )}
+        {renderContent()}
       </ScrollView>
 
       {/* Image Modal Component */}
