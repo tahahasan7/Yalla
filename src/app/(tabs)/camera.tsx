@@ -16,20 +16,17 @@ import {
   Animated,
   BackHandler,
   Dimensions,
-  Easing,
-  FlatList,
   Image,
   Platform,
   StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon } from "../../components/common";
-import FlowStateIcon from "../../components/social/FlowStateIcon";
+import SelectGoalButton from "../../components/goal-camera/SelectGoalButton";
 import { CATEGORIES } from "../../constants/goalData";
 import { NAVBAR_HEIGHT } from "../../constants/socialData";
 import { DarkTheme, DefaultTheme } from "../../constants/theme";
@@ -38,59 +35,6 @@ import { goalService } from "../../services/goalService";
 
 // Get screen dimensions for responsive layout
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
-
-// Component for each goal item
-const GoalItem = ({
-  goal,
-  isSelected,
-  onSelect,
-}: {
-  goal: any;
-  isSelected: boolean;
-  onSelect: (goal: any) => void;
-}) => {
-  // Get the category icon for the goal
-  const getCategoryIcon = () => {
-    // Find the category in CATEGORIES array
-    const category = CATEGORIES.find((cat) => cat.name === goal.category?.name);
-
-    // If category found, return the icon info, otherwise return a default
-    return (
-      category || {
-        name: goal.category?.name || "Default",
-        icon: "flag-outline",
-      }
-    );
-  };
-
-  const categoryIcon = getCategoryIcon();
-
-  // Get the flow state (adding a default value if not present)
-  const flowState = goal.flow_state || "still";
-
-  return (
-    <TouchableOpacity
-      style={[
-        styles.goalItem,
-        isSelected && { borderColor: goal.color, borderWidth: 2 },
-      ]}
-      onPress={() => onSelect(goal)}
-      activeOpacity={0.7}
-    >
-      <View style={[styles.goalIconContainer, { backgroundColor: goal.color }]}>
-        <Icon name={categoryIcon.icon} size={18} color="#fff" />
-      </View>
-
-      <View style={styles.goalInfo}>
-        <Text style={styles.goalTitle}>{goal.title}</Text>
-        <View style={styles.goalFrequencyContainer}>
-          <Text style={styles.goalFrequency}>{goal.frequency}</Text>
-        </View>
-      </View>
-      <FlowStateIcon flowState={flowState} size={22} />
-    </TouchableOpacity>
-  );
-};
 
 export default function GoalCameraScreen() {
   // State and variables from the original component
@@ -103,7 +47,6 @@ export default function GoalCameraScreen() {
   const [capturedImage, setCapturedImage] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
   const [processing, setProcessing] = useState(false);
-  const [showGoalSelector, setShowGoalSelector] = useState(false);
   const [selectedGoal, setSelectedGoal] = useState<any | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const cameraRef = useRef<any>(null);
@@ -111,9 +54,11 @@ export default function GoalCameraScreen() {
   const navigation = useNavigation();
   const router = useRouter();
   const params = useLocalSearchParams();
-  const goalSelectorAnim = useRef(new Animated.Value(0)).current;
   const [isNavigating, setIsNavigating] = useState(false);
   const [cameraReady, setCameraReady] = useState(true);
+
+  // Ref for the SelectGoalButton component
+  const selectGoalButtonRef = useRef<any>(null);
 
   // Add state for goals fetched from database
   const [goals, setGoals] = useState<any[]>([]);
@@ -145,7 +90,7 @@ export default function GoalCameraScreen() {
   const selectedCategoryIcon = getSelectedGoalIcon();
 
   // Add state for the back button visibility
-  const [showBackButton, setShowBackButton] = useState(false); // Changed to false to hide back button
+  const [showBackButton, setShowBackButton] = useState(false);
 
   // Camera and gallery permissions
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
@@ -236,6 +181,40 @@ export default function GoalCameraScreen() {
       }
     };
   }, []);
+
+  // Auto-select goal if navigated from goal details
+  useEffect(() => {
+    if (params.goalId) {
+      const goalId = String(params.goalId);
+
+      // First check in fetched goals
+      if (goals.length > 0) {
+        const goalToSelect = goals.find((g) => g.id === goalId);
+        if (goalToSelect) {
+          setSelectedGoal(goalToSelect);
+        }
+      } else {
+        // If goals not yet fetched, fetch all goals and find the one we need
+        const fetchGoalsAndSelect = async () => {
+          try {
+            await fetchGoals(); // This will populate the goals array
+
+            // Now check if the goal is in the fetched goals
+            if (goals.length > 0) {
+              const goalToSelect = goals.find((g) => g.id === goalId);
+              if (goalToSelect) {
+                setSelectedGoal(goalToSelect);
+              }
+            }
+          } catch (error) {
+            console.error("Error fetching goal by ID:", error);
+          }
+        };
+
+        fetchGoalsAndSelect();
+      }
+    }
+  }, [params.goalId, goals]);
 
   // Add effect to handle reset parameter from post-sharing
   useEffect(() => {
@@ -408,8 +387,10 @@ export default function GoalCameraScreen() {
 
     // Prevent picking image if no goal is selected
     if (!selectedGoal) {
-      // Show the goal selector if no goal is selected without haptic feedback
-      toggleGoalSelector();
+      // Open the goal selector instead of showing an alert
+      if (selectGoalButtonRef.current) {
+        selectGoalButtonRef.current.toggleGoalSelector();
+      }
       return;
     }
 
@@ -482,8 +463,10 @@ export default function GoalCameraScreen() {
 
     // Prevent taking photo if no goal is selected
     if (!selectedGoal) {
-      // Show the goal selector if no goal is selected without haptic feedback
-      toggleGoalSelector();
+      // Open the goal selector instead of showing an alert
+      if (selectGoalButtonRef.current) {
+        selectGoalButtonRef.current.toggleGoalSelector();
+      }
       return;
     }
 
@@ -699,40 +682,9 @@ export default function GoalCameraScreen() {
     });
   };
 
-  // Updated function to toggle goal selector with fixed animations
-  function toggleGoalSelector() {
-    // If we're showing the selector, force a goals refresh
-    if (!showGoalSelector) {
-      fetchGoals();
-    }
-
-    // Toggle state
-    setShowGoalSelector(!showGoalSelector);
-
-    // Use separate animations - one for opacity/translate (native) and one for height (non-native)
-    if (!showGoalSelector) {
-      // Opening animation
-      Animated.timing(goalSelectorAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.cubic),
-      }).start();
-    } else {
-      // Closing animation
-      Animated.timing(goalSelectorAnim, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-        easing: Easing.out(Easing.cubic),
-      }).start();
-    }
-  }
-
   // Handle goal selection
-  const selectGoal = (goal: any) => {
+  const handleGoalSelect = (goal: any) => {
     setSelectedGoal(goal);
-    toggleGoalSelector();
   };
 
   // Add permission gating logic: only render camera when permission is granted
@@ -841,6 +793,15 @@ export default function GoalCameraScreen() {
 
             {/* Bottom action button - only Next */}
             <View style={styles.previewActions}>
+              {/* Save button */}
+              <TouchableOpacity
+                style={styles.saveButton}
+                onPress={saveImage}
+                disabled={isNavigating} // Disable when navigating
+              >
+                <Ionicons name="download-outline" size={22} color="white" />
+              </TouchableOpacity>
+
               <TouchableOpacity
                 style={styles.nextButton}
                 onPress={handleNext}
@@ -925,57 +886,15 @@ export default function GoalCameraScreen() {
             {/* Top controls */}
             <View style={[styles.topControls, { marginTop: 10 }]}>
               <View style={styles.topLeftControls}>
-                {/* Goal Selector Button */}
-                <TouchableOpacity
-                  style={[
-                    styles.goalSelectorButton,
-                    selectedGoal
-                      ? { backgroundColor: selectedGoal.color }
-                      : null,
-                  ]}
-                  onPress={toggleGoalSelector}
-                  activeOpacity={0.8}
-                >
-                  {selectedGoal ? (
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 20,
-                      }}
-                    >
-                      <View style={styles.selectedGoalIcon}>
-                        <Icon
-                          name={selectedCategoryIcon?.icon || selectedGoal.icon}
-                          size={18}
-                          color="#fff"
-                        />
-                      </View>
-                      <Text style={styles.selectedGoalText}>
-                        {selectedGoal.title}
-                      </Text>
-                      <Ionicons
-                        name={showGoalSelector ? "chevron-up" : "chevron-down"}
-                        size={16}
-                        color="#fff"
-                      />
-                    </View>
-                  ) : (
-                    <View
-                      style={{ flexDirection: "row", alignItems: "center" }}
-                    >
-                      <Ionicons name="flag-outline" size={18} color="white" />
-                      <Text style={styles.goalSelectorButtonText}>
-                        Select Goal
-                      </Text>
-                      <Ionicons
-                        name={showGoalSelector ? "chevron-up" : "chevron-down"}
-                        size={16}
-                        color="white"
-                      />
-                    </View>
-                  )}
-                </TouchableOpacity>
+                {/* Replace custom goal selector with SelectGoalButton component */}
+                <SelectGoalButton
+                  selectedGoal={selectedGoal}
+                  onSelectGoal={handleGoalSelect}
+                  goals={goals}
+                  isLoading={showLoading}
+                  onRefresh={fetchGoals}
+                  ref={selectGoalButtonRef}
+                />
               </View>
 
               <View style={styles.topRightControls}>
@@ -1007,100 +926,6 @@ export default function GoalCameraScreen() {
                 )}
               </View>
             </View>
-
-            {/* Improved Goal selector dropdown */}
-            {showGoalSelector && (
-              <>
-                {/* Background overlay to capture outside touches */}
-                <TouchableWithoutFeedback onPress={toggleGoalSelector}>
-                  <View style={styles.goalSelectorBackdrop} />
-                </TouchableWithoutFeedback>
-
-                <Animated.View
-                  style={[
-                    styles.goalSelectorContainer,
-                    {
-                      opacity: goalSelectorAnim,
-                      transform: [
-                        {
-                          translateY: goalSelectorAnim.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [-50, 0],
-                          }),
-                        },
-                      ],
-                    },
-                  ]}
-                >
-                  <View style={styles.goalSelectorHeader}>
-                    <Text style={styles.goalSelectorTitle}>Select a Goal</Text>
-                    <TouchableOpacity
-                      style={styles.closeButton}
-                      onPress={toggleGoalSelector}
-                    >
-                      <Ionicons
-                        name="close"
-                        size={22}
-                        color="rgba(255,255,255,0.8)"
-                      />
-                    </TouchableOpacity>
-                  </View>
-
-                  <Text style={styles.goalSelectorSubtitle}>
-                    Choose which goal you're working towards with this photo
-                  </Text>
-
-                  {showLoading ? (
-                    <View style={styles.loadingContainer}>
-                      <ActivityIndicator size="large" color="#fff" />
-                      <Text style={styles.loadingText}>Loading goals...</Text>
-                    </View>
-                  ) : goals.length > 0 ? (
-                    <FlatList
-                      data={goals}
-                      keyExtractor={(item) => item.id}
-                      renderItem={({ item }) => (
-                        <GoalItem
-                          goal={item}
-                          isSelected={selectedGoal?.id === item.id}
-                          onSelect={selectGoal}
-                        />
-                      )}
-                      showsVerticalScrollIndicator={false}
-                      style={styles.goalList}
-                      contentContainerStyle={styles.goalListContent}
-                    />
-                  ) : !isLoading ? (
-                    <View style={styles.emptyStateContainer}>
-                      <Ionicons
-                        name="flag-outline"
-                        size={40}
-                        color="rgba(255,255,255,0.6)"
-                      />
-                      <Text style={styles.emptyStateText}>
-                        No active goals found
-                      </Text>
-                      <Text style={styles.emptyStateSubtext}>
-                        Create a goal first to capture your progress
-                      </Text>
-                      <TouchableOpacity
-                        style={styles.createGoalButton}
-                        onPress={() => router.push("/create-goal")}
-                      >
-                        <Text style={styles.createGoalButtonText}>
-                          Create Goal
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <View style={styles.loadingContainer}>
-                      <ActivityIndicator size="large" color="#fff" />
-                      <Text style={styles.loadingText}>Loading goals...</Text>
-                    </View>
-                  )}
-                </Animated.View>
-              </>
-            )}
 
             {/* Night mode overlay */}
             {nightMode && <View style={styles.nightModeOverlay} />}
@@ -1253,150 +1078,6 @@ const styles = StyleSheet.create({
     borderRadius: 35,
   },
 
-  // Goal selector styled like modern apps
-  goalSelectorButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    borderRadius: 25,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    height: 44,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.2)",
-    maxWidth: SCREEN_WIDTH - 120,
-  },
-  goalSelectorButtonText: {
-    color: "white",
-    fontSize: 14,
-    fontWeight: "500",
-    marginHorizontal: 8,
-  },
-  selectedGoalIcon: {},
-  selectedGoalText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  goalSelectorBackdrop: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 999,
-  },
-  goalSelectorContainer: {
-    position: "absolute",
-    top: 80,
-    left: 16,
-    right: 16,
-    backgroundColor: "rgba(24, 24, 27, 0.98)",
-    borderRadius: 24,
-    overflow: "hidden",
-    zIndex: 1000,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 15,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.1)",
-  },
-  goalSelectorHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.1)",
-  },
-  goalSelectorTitle: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-  },
-  closeButton: {
-    padding: 6,
-    borderRadius: 20,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    width: 32,
-    height: 32,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  goalSelectorSubtitle: {
-    color: "rgba(255, 255, 255, 0.7)",
-    fontSize: 13,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-    paddingBottom: 16,
-    fontWeight: "400",
-    letterSpacing: 0.2,
-  },
-  goalList: {
-    marginBottom: 20,
-  },
-  goalListContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 20,
-  },
-  goalItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(255, 255, 255, 0.06)",
-    borderRadius: 18,
-    marginBottom: 10,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.08)",
-  },
-  goalIconContainer: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 14,
-  },
-  goalInfo: {
-    flex: 1,
-  },
-  goalTitle: {
-    color: "white",
-    fontSize: 16,
-    fontWeight: "600",
-    marginBottom: 2,
-  },
-  goalFrequencyContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  goalFrequency: {
-    color: "rgba(255, 255, 255, 0.7)",
-    fontSize: 13,
-  },
-  flowStateContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
-    borderRadius: 12,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    marginRight: 6,
-  },
-  flowStateText: {
-    fontSize: 12,
-    fontWeight: "600",
-    marginLeft: 4,
-  },
-  selectedIndicator: {
-    marginLeft: 6,
-  },
-
   // Preview screen styles
   previewImage: {
     flex: 1,
@@ -1455,12 +1136,14 @@ const styles = StyleSheet.create({
   previewActions: {
     paddingHorizontal: 20,
     paddingBottom: Platform.OS === "ios" ? 34 : 20,
-
     position: "absolute",
     bottom: 0,
     left: 0,
     right: 0,
     zIndex: 1000,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   nextButton: {
     backgroundColor: "#fff",
@@ -1561,5 +1244,14 @@ const styles = StyleSheet.create({
     color: "#000",
     fontSize: 16,
     fontWeight: "600",
+  },
+  saveButton: {
+    backgroundColor: "rgba(0, 0, 0, 0.4)",
+    borderRadius: 20,
+    padding: 10,
+    width: 40,
+    height: 40,
+    justifyContent: "center",
+    alignItems: "center",
   },
 });

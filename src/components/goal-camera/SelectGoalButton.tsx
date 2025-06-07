@@ -1,5 +1,10 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useRef, useState } from "react";
+import React, {
+  forwardRef,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import {
   ActivityIndicator,
   Animated,
@@ -77,217 +82,235 @@ interface SelectGoalButtonProps {
   onRefresh?: () => void; // Refresh function
 }
 
-export default function SelectGoalButton({
-  selectedGoal,
-  onSelectGoal,
-  goals,
-  isLoading = false,
-  onRefresh,
-}: SelectGoalButtonProps) {
-  // State for goal selector
-  const [showGoalSelector, setShowGoalSelector] = useState(false);
-  const goalSelectorAnim = useRef(new Animated.Value(0)).current;
-  const goalSelectorHeight = useRef(new Animated.Value(0)).current;
+// Export the imperative handle type for TypeScript
+export type SelectGoalButtonHandle = {
+  toggleGoalSelector: () => void;
+};
 
-  // Use provided goals if available, otherwise use GOALS from constants
-  const activeGoals = goals ? goals : GOALS.filter((goal) => !goal.completed);
+const SelectGoalButton = forwardRef<
+  SelectGoalButtonHandle,
+  SelectGoalButtonProps
+>(
+  (
+    { selectedGoal, onSelectGoal, goals, isLoading = false, onRefresh },
+    ref
+  ) => {
+    // State for goal selector
+    const [showGoalSelector, setShowGoalSelector] = useState(false);
+    const goalSelectorAnim = useRef(new Animated.Value(0)).current;
+    const goalSelectorHeight = useRef(new Animated.Value(0)).current;
 
-  // Toggle goal selector
-  function toggleGoalSelector() {
-    // If we're showing the selector and onRefresh is provided, call it
-    if (!showGoalSelector && onRefresh) {
-      onRefresh();
+    // Use provided goals if available, otherwise use GOALS from constants
+    const activeGoals = goals ? goals : GOALS.filter((goal) => !goal.completed);
+
+    // Toggle goal selector
+    function toggleGoalSelector() {
+      // If we're showing the selector and onRefresh is provided, call it
+      if (!showGoalSelector && onRefresh) {
+        onRefresh();
+      }
+
+      // If goal selector is currently visible, hide it
+      if (showGoalSelector) {
+        Animated.parallel([
+          Animated.timing(goalSelectorAnim, {
+            toValue: 0,
+            duration: 250,
+            useNativeDriver: true,
+          }),
+          Animated.timing(goalSelectorHeight, {
+            toValue: 0,
+            duration: 250,
+            useNativeDriver: false,
+          }),
+        ]).start(() => {
+          setShowGoalSelector(false);
+        });
+      } else {
+        // Show goal selector
+        setShowGoalSelector(true);
+        Animated.parallel([
+          Animated.timing(goalSelectorAnim, {
+            toValue: 1,
+            duration: 300,
+            useNativeDriver: true,
+          }),
+          Animated.timing(goalSelectorHeight, {
+            toValue: 280, // Set to the height of your goal selector
+            duration: 300,
+            useNativeDriver: false,
+          }),
+        ]).start();
+      }
     }
 
-    // If goal selector is currently visible, hide it
-    if (showGoalSelector) {
-      Animated.parallel([
-        Animated.timing(goalSelectorAnim, {
-          toValue: 0,
-          duration: 250,
-          useNativeDriver: true,
-        }),
-        Animated.timing(goalSelectorHeight, {
-          toValue: 0,
-          duration: 250,
-          useNativeDriver: false,
-        }),
-      ]).start(() => {
-        setShowGoalSelector(false);
-      });
-    } else {
-      // Show goal selector
-      setShowGoalSelector(true);
-      Animated.parallel([
-        Animated.timing(goalSelectorAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.timing(goalSelectorHeight, {
-          toValue: 280, // Set to the height of your goal selector
-          duration: 300,
-          useNativeDriver: false,
-        }),
-      ]).start();
+    // Expose toggleGoalSelector method to parent components via ref
+    useImperativeHandle(ref, () => ({
+      toggleGoalSelector,
+    }));
+
+    // Select a goal
+    function selectGoal(goal: Goal) {
+      // Haptic feedback removed
+      onSelectGoal(goal);
+      toggleGoalSelector();
     }
-  }
 
-  // Select a goal
-  function selectGoal(goal: Goal) {
-    // Haptic feedback removed
-    onSelectGoal(goal);
-    toggleGoalSelector();
-  }
+    // Get the category icon for the currently selected goal
+    const getSelectedGoalIcon = () => {
+      if (!selectedGoal) return null;
 
-  // Get the category icon for the currently selected goal
-  const getSelectedGoalIcon = () => {
-    if (!selectedGoal) return null;
+      // Handle database goals where category might be an object
+      const categoryName =
+        typeof selectedGoal.category === "object" && selectedGoal.category
+          ? selectedGoal.category.name
+          : selectedGoal.category;
 
-    // Handle database goals where category might be an object
-    const categoryName =
-      typeof selectedGoal.category === "object" && selectedGoal.category
-        ? selectedGoal.category.name
-        : selectedGoal.category;
+      // Find the category in CATEGORIES array
+      const category = CATEGORIES.find((cat) => cat.name === categoryName);
 
-    // Find the category in CATEGORIES array
-    const category = CATEGORIES.find((cat) => cat.name === categoryName);
+      // Return the category if found, otherwise use the goal's icon as fallback
+      return category || { name: "Default", icon: selectedGoal.icon || "Task" };
+    };
 
-    // Return the category if found, otherwise use the goal's icon as fallback
-    return category || { name: "Default", icon: selectedGoal.icon || "Task" };
-  };
+    const selectedCategoryIcon = getSelectedGoalIcon();
 
-  const selectedCategoryIcon = getSelectedGoalIcon();
-
-  return (
-    <>
-      {/* Improved Goal Selector Button */}
-      <TouchableOpacity
-        style={[
-          styles.goalSelectorButton,
-          selectedGoal ? { backgroundColor: selectedGoal.color } : null,
-        ]}
-        onPress={toggleGoalSelector}
-        activeOpacity={0.8}
-      >
-        {selectedGoal ? (
-          <React.Fragment>
-            <View style={styles.selectedIndicator}>
-              <Icon
-                name={selectedCategoryIcon?.icon || selectedGoal.icon || "Task"}
-                size={18}
-                color="#fff"
-              />
-              <View style={{ backgroundColor: "transparent", gap: 10 }}>
-                <Text
-                  style={styles.selectedGoalText}
-                  numberOfLines={1}
-                  ellipsizeMode="tail"
-                >
-                  {selectedGoal.title}
-                </Text>
+    return (
+      <>
+        {/* Improved Goal Selector Button */}
+        <TouchableOpacity
+          style={[
+            styles.goalSelectorButton,
+            selectedGoal ? { backgroundColor: selectedGoal.color } : null,
+          ]}
+          onPress={toggleGoalSelector}
+          activeOpacity={0.8}
+        >
+          {selectedGoal ? (
+            <React.Fragment>
+              <View style={styles.selectedIndicator}>
+                <Icon
+                  name={
+                    selectedCategoryIcon?.icon || selectedGoal.icon || "Task"
+                  }
+                  size={18}
+                  color="#fff"
+                />
+                <View style={{ backgroundColor: "transparent", gap: 10 }}>
+                  <Text
+                    style={styles.selectedGoalText}
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                  >
+                    {selectedGoal.title}
+                  </Text>
+                </View>
+                <Ionicons
+                  name={showGoalSelector ? "chevron-up" : "chevron-down"}
+                  size={16}
+                  color="#fff"
+                />
               </View>
+            </React.Fragment>
+          ) : (
+            <React.Fragment>
+              <Ionicons name="flag-outline" size={18} color="white" />
+              <Text style={styles.goalSelectorButtonText}>Select Goal</Text>
               <Ionicons
                 name={showGoalSelector ? "chevron-up" : "chevron-down"}
                 size={16}
-                color="#fff"
+                color="white"
               />
-            </View>
-          </React.Fragment>
-        ) : (
-          <React.Fragment>
-            <Ionicons name="flag-outline" size={18} color="white" />
-            <Text style={styles.goalSelectorButtonText}>Select Goal</Text>
-            <Ionicons
-              name={showGoalSelector ? "chevron-up" : "chevron-down"}
-              size={16}
-              color="white"
-            />
-          </React.Fragment>
-        )}
-      </TouchableOpacity>
+            </React.Fragment>
+          )}
+        </TouchableOpacity>
 
-      {/* Improved Goal selector dropdown */}
-      {showGoalSelector && (
-        <>
-          {/* Background overlay to capture outside touches */}
-          <TouchableWithoutFeedback onPress={toggleGoalSelector}>
-            <View style={styles.goalSelectorBackdrop} />
-          </TouchableWithoutFeedback>
+        {/* Improved Goal selector dropdown */}
+        {showGoalSelector && (
+          <>
+            {/* Background overlay to capture outside touches */}
+            <TouchableWithoutFeedback onPress={toggleGoalSelector}>
+              <View style={styles.goalSelectorBackdrop} />
+            </TouchableWithoutFeedback>
 
-          <Animated.View
-            style={[
-              styles.goalSelectorContainer,
-              {
-                opacity: goalSelectorAnim,
-                transform: [
-                  {
-                    translateY: goalSelectorAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [-50, 0],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          >
-            <View style={styles.goalSelectorHeader}>
-              <Text style={styles.goalSelectorTitle}>Select a Goal</Text>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={toggleGoalSelector}
-              >
-                <Ionicons
-                  name="close"
-                  size={22}
-                  color="rgba(255,255,255,0.8)"
-                />
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.goalSelectorSubtitle}>
-              Choose which goal you're working towards with this photo
-            </Text>
-
-            {isLoading ? (
-              <View style={styles.loadingContainer}>
-                <ActivityIndicator size="large" color="#fff" />
-                <Text style={styles.loadingText}>Loading goals...</Text>
-              </View>
-            ) : activeGoals.length > 0 ? (
-              <FlatList
-                data={activeGoals}
-                keyExtractor={(item) => item.id}
-                renderItem={({ item }) => (
-                  <GoalItem
-                    goal={item}
-                    isSelected={selectedGoal?.id === item.id}
-                    onSelect={selectGoal}
+            <Animated.View
+              style={[
+                styles.goalSelectorContainer,
+                {
+                  opacity: goalSelectorAnim,
+                  transform: [
+                    {
+                      translateY: goalSelectorAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [-50, 0],
+                      }),
+                    },
+                  ],
+                },
+              ]}
+            >
+              <View style={styles.goalSelectorHeader}>
+                <Text style={styles.goalSelectorTitle}>Select a Goal</Text>
+                <TouchableOpacity
+                  style={styles.closeButton}
+                  onPress={toggleGoalSelector}
+                >
+                  <Ionicons
+                    name="close"
+                    size={22}
+                    color="rgba(255,255,255,0.8)"
                   />
-                )}
-                showsVerticalScrollIndicator={false}
-                style={styles.goalList}
-                contentContainerStyle={styles.goalListContent}
-              />
-            ) : (
-              <View style={styles.emptyStateContainer}>
-                <Ionicons
-                  name="flag-outline"
-                  size={40}
-                  color="rgba(255,255,255,0.6)"
-                />
-                <Text style={styles.emptyStateText}>No active goals found</Text>
-                <Text style={styles.emptyStateSubtext}>
-                  Create a goal first to capture your progress
-                </Text>
+                </TouchableOpacity>
               </View>
-            )}
-          </Animated.View>
-        </>
-      )}
-    </>
-  );
-}
+
+              <Text style={styles.goalSelectorSubtitle}>
+                Choose which goal you're working towards with this photo
+              </Text>
+
+              {isLoading ? (
+                <View style={styles.loadingContainer}>
+                  <ActivityIndicator size="large" color="#fff" />
+                  <Text style={styles.loadingText}>Loading goals...</Text>
+                </View>
+              ) : activeGoals.length > 0 ? (
+                <FlatList
+                  data={activeGoals}
+                  keyExtractor={(item) => item.id}
+                  renderItem={({ item }) => (
+                    <GoalItem
+                      goal={item}
+                      isSelected={selectedGoal?.id === item.id}
+                      onSelect={selectGoal}
+                    />
+                  )}
+                  showsVerticalScrollIndicator={false}
+                  style={styles.goalList}
+                  contentContainerStyle={styles.goalListContent}
+                />
+              ) : (
+                <View style={styles.emptyStateContainer}>
+                  <Ionicons
+                    name="flag-outline"
+                    size={40}
+                    color="rgba(255,255,255,0.6)"
+                  />
+                  <Text style={styles.emptyStateText}>
+                    No active goals found
+                  </Text>
+                  <Text style={styles.emptyStateSubtext}>
+                    Create a goal first to capture your progress
+                  </Text>
+                </View>
+              )}
+            </Animated.View>
+          </>
+        )}
+      </>
+    );
+  }
+);
+
+export default SelectGoalButton;
 
 const styles = StyleSheet.create({
   goalSelectorButton: {
