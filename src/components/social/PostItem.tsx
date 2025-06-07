@@ -26,12 +26,8 @@ interface PostItemProps {
   scrollY: Animated.Value;
   itemHeight: number;
   headerAnimation: Animated.Value;
-  isLiked: boolean;
-  showParticles: boolean;
   musicPlayerAnim: Animated.Value;
   musicPlayerExpanded: boolean;
-  handleLike: (postId: string) => void;
-  handleDoubleTap: (postId: string) => void;
   toggleMusicPlayer: (postId: string) => void;
   currentIndex?: number;
 }
@@ -42,25 +38,13 @@ const PostItem = ({
   scrollY,
   itemHeight,
   headerAnimation,
-  isLiked: initialIsLiked,
-  showParticles: initialShowParticles,
   musicPlayerAnim,
   musicPlayerExpanded,
-  handleLike: parentHandleLike,
-  handleDoubleTap,
   toggleMusicPlayer,
   currentIndex,
 }: PostItemProps) => {
-  // Local state to manage like/surprise state
-  const [isLiked, setIsLiked] = useState(initialIsLiked);
-  const [showHeartParticles, setShowHeartParticles] =
-    useState(initialShowParticles);
   // State for the music player bottom sheet
   const [musicBottomSheetVisible, setMusicBottomSheetVisible] = useState(false);
-  // State for surprise particles
-  const [showSurpriseParticles, setShowSurpriseParticles] = useState(false);
-  // State for surprise button active state
-  const [isSurprised, setIsSurprised] = useState(false);
   // Track if this component should allow playback (based on screen focus)
   const [isScreenFocused, setIsScreenFocused] = useState(true);
 
@@ -70,6 +54,11 @@ const PostItem = ({
   const playerStatus = useAudioPlayerStatus(audioPlayer);
   // Check if audio is playing
   const isPlaying = playerStatus?.playing || false;
+
+  // Add this function to directly open the bottom sheet
+  const openMusicSheet = () => {
+    setMusicBottomSheetVisible(true);
+  };
 
   // Set audio to loop mode
   useEffect(() => {
@@ -103,16 +92,6 @@ const PostItem = ({
       };
     }, [audioPlayer, isPlaying, item.id])
   );
-
-  // Animation values for button scaling
-  const surpriseScale = useRef(new Animated.Value(1)).current;
-  const likeScale = useRef(new Animated.Value(1)).current;
-
-  // Update local state when parent state changes
-  useEffect(() => {
-    setIsLiked(initialIsLiked);
-    setShowHeartParticles(initialShowParticles);
-  }, [initialIsLiked, initialShowParticles]);
 
   // Auto-play audio when this item is the current item
   useEffect(() => {
@@ -339,76 +318,6 @@ const PostItem = ({
     } catch (error) {
       console.error("Error toggling audio:", error);
     }
-  };
-
-  // Button press animation function
-  const animateButtonPress = (scale: Animated.Value) => {
-    Animated.sequence([
-      Animated.timing(scale, {
-        toValue: 1.4,
-        duration: 150,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scale, {
-        toValue: 0.9,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scale, {
-        toValue: 1.1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-      Animated.timing(scale, {
-        toValue: 1,
-        duration: 100,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
-
-  // Handle like button press - haptic only when liking
-  const handleLike = (postId: string) => {
-    const newLikeState = !isLiked;
-    setIsLiked(newLikeState);
-
-    // Turn off surprised if now liking
-    if (newLikeState && isSurprised) {
-      setIsSurprised(false);
-    }
-
-    if (newLikeState) {
-      setShowHeartParticles(true);
-      // Haptic feedback only on like
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      animateButtonPress(likeScale);
-      setTimeout(() => setShowHeartParticles(false), 1000);
-    }
-
-    parentHandleLike(postId);
-  };
-
-  // Handle surprise button press (unchanged)
-  const handleSurprisePress = () => {
-    const newSurprisedState = !isSurprised;
-    setIsSurprised(newSurprisedState);
-
-    if (newSurprisedState && isLiked) {
-      setIsLiked(false);
-      parentHandleLike(item.id);
-    }
-
-    if (newSurprisedState) {
-      setShowSurpriseParticles(true);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      animateButtonPress(surpriseScale);
-      setTimeout(() => setShowSurpriseParticles(false), 1000);
-    }
-  };
-
-  // Add this new simplified function to directly open the bottom sheet
-  const openMusicSheet = () => {
-    setMusicBottomSheetVisible(true);
   };
 
   return (
@@ -797,80 +706,6 @@ const styles = StyleSheet.create({
     justifyContent: "flex-end",
     gap: 16,
   },
-  likeButton: {
-    width: 41,
-    height: 41,
-    borderRadius: 100,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#FF375F",
-    shadowOffset: {
-      width: 0,
-      height: 0,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
-  likeButtonActive: {
-    shadowColor: "#FF375F",
-    shadowOffset: {
-      width: 0,
-      height: 0,
-    },
-    shadowOpacity: 0.8,
-    shadowRadius: 15,
-  },
-  heartIcon: {
-    color: "#FF4057",
-    fontSize: 24,
-    fontFamily: FontFamily.Regular,
-  },
-  heartIconActive: {
-    color: "#FF4057",
-    fontSize: 26,
-  },
-  particlesContainer: {
-    position: "absolute",
-    width: 200,
-    height: 200,
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 10,
-    pointerEvents: "none",
-  },
-  heartParticle: {
-    position: "absolute",
-    color: "#FF4057",
-    fontSize: 14,
-    textShadowColor: "rgba(0, 0, 0, 0.5)",
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  shareButton: {
-    width: 41,
-    height: 41,
-    borderRadius: 100,
-    backgroundColor: "rgba(0, 0, 0, 0.7)",
-    justifyContent: "center",
-    alignItems: "center",
-    shadowColor: "#ffffff",
-    shadowOffset: {
-      width: 0,
-      height: 0,
-    },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
-  surpriseButtonActive: {
-    shadowColor: "#5856D6",
-    shadowOffset: {
-      width: 0,
-      height: 0,
-    },
-    shadowOpacity: 0.8,
-    shadowRadius: 15,
-  },
   menuIconButton: {
     width: 38,
     height: 38,
@@ -915,21 +750,6 @@ const styles = StyleSheet.create({
     marginLeft: 10,
     fontFamily: FontFamily.Medium,
     fontSize: 16,
-  },
-  shareIcon: {
-    color: "white",
-    fontSize: 20,
-    fontFamily: FontFamily.Bold,
-    fontWeight: "bold",
-  },
-  likeCount: {
-    color: "white",
-    fontSize: 12,
-    fontFamily: FontFamily.Bold,
-    fontWeight: "bold",
-    textShadowColor: "rgba(0, 0, 0, 0.75)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 3,
   },
   globalAudioButton: {
     width: 41,
