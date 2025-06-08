@@ -30,6 +30,7 @@ import Surprise from "../../../assets/icons/surprise.js";
 import SyncOutline from "../../../assets/icons/sync-outline.js";
 import Task02SolidRounded from "../../../assets/icons/task-02-solid-rounded.js";
 import TimeSchedule from "../../../assets/icons/time-schedule.js";
+import Timeline from "../../../assets/icons/timeline.js";
 import UserGroupSolidRounded from "../../../assets/icons/user-group-solid-rounded .js";
 import WorkoutRun from "../../../assets/icons/workout-run-solid-rounded.js";
 
@@ -70,6 +71,7 @@ const IconComponents: Record<string, React.ComponentType<CustomIconProps>> = {
   SyncOutline,
   Task02SolidRounded,
   TimeSchedule,
+  Timeline,
   UserGroupSolidRounded,
   WorkoutRun,
 
@@ -98,6 +100,7 @@ const IconComponents: Record<string, React.ComponentType<CustomIconProps>> = {
   Study: StudyDesk,
   Task: Task02SolidRounded,
   Time: TimeSchedule,
+  TimeLine: Timeline,
   Group: UserGroupSolidRounded,
   Run: WorkoutRun,
   Sync: SyncOutline,
@@ -112,6 +115,7 @@ const IconComponents: Record<string, React.ComponentType<CustomIconProps>> = {
   Finance: MoneyBag01SolidRounded,
   Social: UserGroupSolidRounded,
   Fun: GameController03SolidRounded,
+  Progress: Timeline,
 };
 
 // Icon component props

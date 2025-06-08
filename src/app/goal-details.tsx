@@ -83,6 +83,7 @@ export default function GoalDetailsScreen() {
   const [flowInfoPosition, setFlowInfoPosition] = useState({ top: 150 });
   const flowButtonRef = useRef<View>(null);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [activeTab, setActiveTab] = useState<"details" | "flow">("details");
   const { user } = useAuth();
 
   // State for goal logs
@@ -561,56 +562,41 @@ export default function GoalDetailsScreen() {
               />
             </TouchableOpacity>
             <View style={styles.flexSpacer} />
-            <TouchableOpacity
-              onPress={toggleViewMode}
-              hitSlop={{ top: 20, bottom: 20, left: 20, right: 10 }}
-            >
-              <Icon
-                name={isGridView ? "GridView" : "HalfGrid"}
-                size={30}
-                color="#0E96FF"
-                style={styles.gridViewIcon}
-              />
-            </TouchableOpacity>
+
+            {/* View Toggle Button */}
+            <View style={styles.toggleButtonContainer}>
+              <TouchableOpacity
+                onPress={() => (!isGridView ? null : setIsGridView(false))}
+                style={[
+                  styles.toggleOption,
+                  !isGridView ? styles.toggleOptionActive : null,
+                  { borderTopLeftRadius: 20, borderBottomLeftRadius: 20 },
+                ]}
+              >
+                <Icon
+                  name="TimeLine"
+                  size={22}
+                  color={!isGridView ? "#FFFFFF" : "#0E96FF"}
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => (!isGridView ? setIsGridView(true) : null)}
+                style={[
+                  styles.toggleOption,
+                  isGridView ? styles.toggleOptionActive : null,
+                  { borderTopRightRadius: 20, borderBottomRightRadius: 20 },
+                ]}
+              >
+                <Icon
+                  name="GridView"
+                  size={22}
+                  color={isGridView ? "#FFFFFF" : "#0E96FF"}
+                />
+              </TouchableOpacity>
+            </View>
           </View>
 
-          {/* Goal Metrics */}
-          {(goal.frequency || goal.duration) && (
-            <View style={styles.goalMetrics}>
-              {goal.frequency && (
-                <View style={styles.metricItem}>
-                  <Ionicons
-                    name="time-outline"
-                    size={16}
-                    color="rgba(255,255,255,0.9)"
-                  />
-                  <Text style={styles.metricText}>{goal.frequency}</Text>
-                </View>
-              )}
-              {goal.duration && (
-                <View style={styles.metricItem}>
-                  <Ionicons
-                    name="calendar-outline"
-                    size={16}
-                    color="rgba(255,255,255,0.9)"
-                  />
-                  <Text style={styles.metricText}>{goal.duration}</Text>
-                </View>
-              )}
-              {goal.progress !== undefined && (
-                <View style={styles.metricItem}>
-                  <Ionicons
-                    name="stats-chart-outline"
-                    size={16}
-                    color="rgba(255,255,255,0.9)"
-                  />
-                  <Text style={styles.metricText}>
-                    {goal.progress}% complete
-                  </Text>
-                </View>
-              )}
-            </View>
-          )}
+          {/* Goal Metrics moved to flow info popup */}
         </View>
 
         {/* Flow State Info Popup */}
@@ -621,56 +607,144 @@ export default function GoalDetailsScreen() {
               <Text style={styles.popupTitle}>
                 Flow State: {flowStateCapitalized}
               </Text>
-              <Text style={styles.popupText}>
-                Flow states represent your progress and consistency with this
-                goal.
-              </Text>
-              <View style={styles.flowStatesList}>
-                <View style={styles.flowStateItem}>
-                  <View style={styles.flowStateIconContainer}>
-                    <Icon name="Still" size={20} />
-                  </View>
-                  <View style={styles.flowStateTextContainer}>
-                    <Text style={styles.flowStateName}>Still</Text>
-                    <Text style={styles.flowStateDescription}>
-                      Just starting out
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.flowStateItem}>
-                  <View style={styles.flowStateIconContainer}>
-                    <Icon name="Kindling" size={20} />
-                  </View>
-                  <View style={styles.flowStateTextContainer}>
-                    <Text style={styles.flowStateName}>Kindling</Text>
-                    <Text style={styles.flowStateDescription}>
-                      Building momentum
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.flowStateItem}>
-                  <View style={styles.flowStateIconContainer}>
-                    <Icon name="Glowing" size={20} />
-                  </View>
-                  <View style={styles.flowStateTextContainer}>
-                    <Text style={styles.flowStateName}>Glowing</Text>
-                    <Text style={styles.flowStateDescription}>
-                      Consistent progress
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.flowStateItem}>
-                  <View style={styles.flowStateIconContainer}>
-                    <Icon name="Flowing" size={20} />
-                  </View>
-                  <View style={styles.flowStateTextContainer}>
-                    <Text style={styles.flowStateName}>Flowing</Text>
-                    <Text style={styles.flowStateDescription}>
-                      Mastery level
-                    </Text>
-                  </View>
-                </View>
+
+              {/* Modern Tab selector */}
+              <View style={styles.modernTabContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.modernTabButton,
+                    activeTab === "details" && styles.modernActiveTabButton,
+                  ]}
+                  onPress={() => setActiveTab("details")}
+                >
+                  <Text
+                    style={[
+                      styles.modernTabButtonText,
+                      activeTab === "details" &&
+                        styles.modernActiveTabButtonText,
+                    ]}
+                  >
+                    Details
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.modernTabButton,
+                    activeTab === "flow" && styles.modernActiveTabButton,
+                  ]}
+                  onPress={() => setActiveTab("flow")}
+                >
+                  <Text
+                    style={[
+                      styles.modernTabButtonText,
+                      activeTab === "flow" && styles.modernActiveTabButtonText,
+                    ]}
+                  >
+                    Flow State
+                  </Text>
+                </TouchableOpacity>
               </View>
+
+              {/* Goal Details Tab */}
+              {activeTab === "details" &&
+                (goal.frequency ||
+                  goal.duration ||
+                  goal.progress !== undefined) && (
+                  <View style={styles.goalMetricsInPopup}>
+                    {goal.frequency && (
+                      <View style={styles.metricItemInPopup}>
+                        <Ionicons
+                          name="time-outline"
+                          size={16}
+                          color="rgba(255,255,255,0.9)"
+                        />
+                        <Text style={styles.metricTextInPopup}>
+                          {goal.frequency}
+                        </Text>
+                      </View>
+                    )}
+                    {goal.duration && (
+                      <View style={styles.metricItemInPopup}>
+                        <Ionicons
+                          name="calendar-outline"
+                          size={16}
+                          color="rgba(255,255,255,0.9)"
+                        />
+                        <Text style={styles.metricTextInPopup}>
+                          {goal.duration}
+                        </Text>
+                      </View>
+                    )}
+                    {goal.progress !== undefined && (
+                      <View style={styles.metricItemInPopup}>
+                        <Ionicons
+                          name="stats-chart-outline"
+                          size={16}
+                          color="rgba(255,255,255,0.9)"
+                        />
+                        <Text style={styles.metricTextInPopup}>
+                          {goal.progress}% complete
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
+
+              {/* Flow State Tab */}
+              {activeTab === "flow" && (
+                <>
+                  <Text style={styles.popupText}>
+                    Flow states represent your progress and consistency with
+                    this goal.
+                  </Text>
+                  <View style={styles.flowStatesList}>
+                    <View style={styles.flowStateItem}>
+                      <View style={styles.flowStateIconContainer}>
+                        <Icon name="Still" size={20} />
+                      </View>
+                      <View style={styles.flowStateTextContainer}>
+                        <Text style={styles.flowStateName}>Still</Text>
+                        <Text style={styles.flowStateDescription}>
+                          Just starting out
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.flowStateItem}>
+                      <View style={styles.flowStateIconContainer}>
+                        <Icon name="Kindling" size={20} />
+                      </View>
+                      <View style={styles.flowStateTextContainer}>
+                        <Text style={styles.flowStateName}>Kindling</Text>
+                        <Text style={styles.flowStateDescription}>
+                          Building momentum
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.flowStateItem}>
+                      <View style={styles.flowStateIconContainer}>
+                        <Icon name="Glowing" size={20} />
+                      </View>
+                      <View style={styles.flowStateTextContainer}>
+                        <Text style={styles.flowStateName}>Glowing</Text>
+                        <Text style={styles.flowStateDescription}>
+                          Consistent progress
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.flowStateItem}>
+                      <View style={styles.flowStateIconContainer}>
+                        <Icon name="Flowing" size={20} />
+                      </View>
+                      <View style={styles.flowStateTextContainer}>
+                        <Text style={styles.flowStateName}>Flowing</Text>
+                        <Text style={styles.flowStateDescription}>
+                          Mastery level
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
+                </>
+              )}
               <TouchableOpacity
                 style={styles.closeButton}
                 onPress={toggleFlowInfo}
@@ -791,10 +865,33 @@ const styles = StyleSheet.create({
   flexSpacer: {
     flex: 1,
   },
-  gridViewIcon: {
-    marginLeft: 12,
-    alignSelf: "center",
+  viewToggleContainer: {
+    position: "absolute",
+    top: 250,
+    right: 16,
+    zIndex: 100,
+    elevation: 5,
+  },
+  toggleButtonContainer: {
+    flexDirection: "row",
+    backgroundColor: "rgba(14, 150, 255, 0.15)",
+    borderRadius: 100,
+    padding: 3,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  toggleOption: {
     padding: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    width: 40,
+  },
+  toggleOptionActive: {
+    backgroundColor: "#0E96FF",
+    borderRadius: 18,
   },
   divider: {
     height: 1,
@@ -1040,5 +1137,62 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: FontFamily.Medium,
     marginTop: 16,
+  },
+  // New styles for goal metrics in popup
+  goalMetricsInPopup: {
+    flexDirection: "column",
+    marginTop: 10,
+    marginBottom: 16,
+    backgroundColor: "rgba(0, 0, 0, 0.3)",
+    borderRadius: 12,
+    padding: 12,
+  },
+  metricsHeader: {
+    fontSize: 15,
+    fontFamily: FontFamily.SemiBold,
+    color: "#0E96FF",
+    marginBottom: 8,
+  },
+  // Modern Tab styles
+  modernTabContainer: {
+    flexDirection: "row",
+    backgroundColor: "rgba(0, 0, 0, 0.3)",
+    borderRadius: 100,
+    marginVertical: 16,
+    overflow: "hidden",
+  },
+  modernTabButton: {
+    flex: 1,
+    paddingVertical: 12,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+  },
+  modernActiveTabButton: {
+    backgroundColor: "#0E96FF",
+    borderRadius: 100,
+  },
+  modernTabButtonText: {
+    fontFamily: FontFamily.Medium,
+    fontSize: 14,
+    color: "rgba(255, 255, 255, 0.7)",
+  },
+  modernActiveTabButtonText: {
+    color: "#FFFFFF",
+    fontFamily: FontFamily.SemiBold,
+  },
+  tabIcon: {
+    marginRight: 6,
+  },
+  metricItemInPopup: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  metricTextInPopup: {
+    fontSize: 14,
+    fontFamily: FontFamily.Regular,
+    color: "white",
+    marginLeft: 8,
   },
 });
