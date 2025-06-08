@@ -550,6 +550,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 8,
+    paddingLeft: 0,
   },
   headerRightButtons: {
     flexDirection: "row",
