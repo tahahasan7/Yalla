@@ -382,6 +382,7 @@ const QuoteBottomSheet = ({ visible, onClose }: QuoteBottomSheetProps) => {
             styles.modalContent,
             { transform: [{ translateY: combinedTransform }] },
           ]}
+          {...panResponder.panHandlers}
         >
           {/* Drag indicator at top of sheet */}
           <View style={styles.dragIndicatorContainer}>

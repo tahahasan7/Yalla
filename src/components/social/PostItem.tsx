@@ -48,6 +48,9 @@ const PostItem = ({
   // Track if this component should allow playback (based on screen focus)
   const [isScreenFocused, setIsScreenFocused] = useState(true);
 
+  // Check if this post has music
+  const hasMusic = !!item.song.audioUrl;
+
   // Create audio player using the hook from expo-audio
   const audioPlayer = useAudioPlayer(item.song.audioUrl);
   // Get player status
@@ -100,8 +103,8 @@ const PostItem = ({
     const updateAudioState = async () => {
       if (!isMounted) return;
 
-      // Only handle audio if screen is focused
-      if (!isScreenFocused) {
+      // Only handle audio if screen is focused and post has music
+      if (!isScreenFocused || !hasMusic) {
         // If screen is not focused, ensure audio is paused
         if (isPlaying) {
           try {
@@ -173,13 +176,24 @@ const PostItem = ({
         }
       }
     };
-  }, [currentIndex, index, audioPlayer, isPlaying, item.id, isScreenFocused]);
+  }, [
+    currentIndex,
+    index,
+    audioPlayer,
+    isPlaying,
+    item.id,
+    isScreenFocused,
+    hasMusic,
+  ]);
 
   // Heartbeat animation for music cover
   const musicCoverScale = useRef(new Animated.Value(1)).current;
 
   // Setup heartbeat animation for music cover - faster with more variation
   useEffect(() => {
+    // Only start the animation if the post has music
+    if (!hasMusic) return;
+
     const startHeartbeatAnimation = () => {
       // Create sequence for heartbeat effect with more variation
       Animated.sequence([
@@ -230,7 +244,7 @@ const PostItem = ({
     return () => {
       musicCoverScale.stopAnimation();
     };
-  }, []);
+  }, [hasMusic]);
 
   // Animation interpolation for scroll effects
   const inputRange = [
@@ -279,8 +293,8 @@ const PostItem = ({
 
   // Function to play/pause audio
   const toggleAudio = async () => {
-    // Only allow toggling audio if screen is focused
-    if (!isScreenFocused) return;
+    // Only allow toggling audio if screen is focused and post has music
+    if (!isScreenFocused || !hasMusic) return;
 
     try {
       // Ensure audio is active before toggling
@@ -452,66 +466,77 @@ const PostItem = ({
 
             {/* Bottom right controls */}
             <View style={styles.likeContainer}>
-              {/* Global play/pause button */}
-              <TouchableOpacity
-                style={styles.globalAudioButton}
-                onPress={toggleAudio}
-              >
-                <Ionicons
-                  name={
-                    audioManager.isAudioEnabled() && isPlaying
-                      ? "pause-circle"
-                      : "play-circle"
-                  }
-                  color="white"
-                  size={28}
-                />
-              </TouchableOpacity>
+              {/* Only show music controls if the post has music */}
+              {hasMusic && (
+                <>
+                  {/* Global play/pause button */}
+                  <TouchableOpacity
+                    style={styles.globalAudioButton}
+                    onPress={toggleAudio}
+                  >
+                    <Ionicons
+                      name={
+                        audioManager.isAudioEnabled() && isPlaying
+                          ? "pause-circle"
+                          : "play-circle"
+                      }
+                      color="white"
+                      size={28}
+                    />
+                  </TouchableOpacity>
 
-              {/* Music info button */}
-              <View style={styles.musicContainer}>
-                <TouchableOpacity
-                  onPress={handleOpenMusicBottomSheet}
-                  hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
-                >
-                  <View style={styles.musicCoverContainer}>
-                    <Animated.View
-                      style={[
-                        styles.musicCoverPlaceholder,
-                        {
-                          transform: [{ scale: musicCoverScale }],
-                        },
-                      ]}
+                  {/* Music info button */}
+                  <View style={styles.musicContainer}>
+                    <TouchableOpacity
+                      onPress={handleOpenMusicBottomSheet}
+                      hitSlop={{ top: 20, bottom: 20, left: 20, right: 20 }}
                     >
-                      <Ionicons name="musical-notes" color="white" size={16} />
-                    </Animated.View>
-                    {isPlaying && (
-                      <View style={styles.playingIndicator}>
-                        <Ionicons name="pause" color="white" size={12} />
+                      <View style={styles.musicCoverContainer}>
+                        <Animated.View
+                          style={[
+                            styles.musicCoverPlaceholder,
+                            {
+                              transform: [{ scale: musicCoverScale }],
+                            },
+                          ]}
+                        >
+                          <Ionicons
+                            name="musical-notes"
+                            color="white"
+                            size={16}
+                          />
+                        </Animated.View>
+                        {isPlaying && (
+                          <View style={styles.playingIndicator}>
+                            <Ionicons name="pause" color="white" size={12} />
+                          </View>
+                        )}
                       </View>
-                    )}
+                    </TouchableOpacity>
                   </View>
-                </TouchableOpacity>
-              </View>
+                </>
+              )}
             </View>
           </Animated.View>
         </View>
       </Animated.View>
 
-      {/* Music Player Bottom Sheet */}
-      <MusicPlayerBottomSheet
-        visible={musicBottomSheetVisible}
-        onClose={handleCloseMusicBottomSheet}
-        song={{
-          title: item.song.name,
-          artist: item.song.artist,
-          coverUrl: item.song.coverUrl,
-          spotifyUri: item.song.spotifyUri,
-          spotifyUrl: item.song.spotifyUrl,
-        }}
-        isPlaying={isPlaying}
-        onPlayPausePress={toggleAudio}
-      />
+      {/* Music Player Bottom Sheet - only render if has music */}
+      {hasMusic && (
+        <MusicPlayerBottomSheet
+          visible={musicBottomSheetVisible}
+          onClose={handleCloseMusicBottomSheet}
+          song={{
+            title: item.song.name,
+            artist: item.song.artist,
+            coverUrl: item.song.coverUrl,
+            spotifyUri: item.song.spotifyUri,
+            spotifyUrl: item.song.spotifyUrl,
+          }}
+          isPlaying={isPlaying}
+          onPlayPausePress={toggleAudio}
+        />
+      )}
     </>
   );
 };
