@@ -1,19 +1,16 @@
-import { Icon } from "@/components/common";
+import ProfilePicButton from "@/components/profile/ProfilePicButton";
 import EmptyStateSocial from "@/components/social/empty state/EmptyStateSocial";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   Animated,
   Easing,
   FlatList,
-  Image,
   NativeScrollEvent,
   NativeSyntheticEvent,
   StatusBar,
   StyleSheet,
   Text,
-  TouchableOpacity,
   useWindowDimensions,
   View,
 } from "react-native";
@@ -38,6 +35,9 @@ import { AUDIO_TRACK_MAP } from "../../constants/musicData";
 // Import Post type from types
 import AddUserHeaderButton from "@/components/add-user/AddUserHeaderButton";
 import { Post } from "../../types/social";
+// Import skeleton loader
+import SocialPostSkeleton from "../../components/social/skeletonLoader/SocialPostSkeleton";
+// Import FontFamily for the toggle button
 
 // Define types for props
 interface PostItemProps {
@@ -71,6 +71,9 @@ export default function SocialScreen() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [isLoadingPosts, setIsLoadingPosts] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Add retry counter
+  const [retryCount, setRetryCount] = useState(0);
+  const MAX_RETRIES = 3; // Maximum number of automatic retries
 
   // Scroll operation state
   const [scrollState, setScrollState] = useState("idle"); // 'idle', 'scrolling', 'animating'
@@ -149,8 +152,10 @@ export default function SocialScreen() {
   /**
    * Fetch posts from the database
    */
-  const fetchPosts = async () => {
-    setIsLoadingPosts(true);
+  const fetchPosts = async (isRetry = false) => {
+    if (!isRetry) {
+      setIsLoadingPosts(true);
+    }
     setError(null);
 
     if (!user) {
@@ -188,6 +193,8 @@ export default function SocialScreen() {
       if (!socialPosts || socialPosts.length === 0) {
         setPosts([]);
         setIsLoadingPosts(false);
+        // Reset retry count on successful fetch (even if no posts)
+        setRetryCount(0);
         return;
       }
 
@@ -336,12 +343,35 @@ export default function SocialScreen() {
       // Update state with formatted posts
       setPosts(formattedPosts);
 
-      // No animation setup needed anymore as pulse animations were removed
+      // Reset retry count on successful fetch
+      setRetryCount(0);
     } catch (error: any) {
       console.error("Error fetching posts:", error);
-      setError(error.message || "Failed to load posts");
+
+      // Increment retry count
+      const newRetryCount = retryCount + 1;
+      setRetryCount(newRetryCount);
+
+      if (newRetryCount < MAX_RETRIES) {
+        // Try again with exponential backoff
+        const backoffDelay = Math.min(
+          1000 * Math.pow(2, newRetryCount - 1),
+          10000
+        );
+        console.log(
+          `Retrying in ${backoffDelay}ms (attempt ${newRetryCount}/${MAX_RETRIES})...`
+        );
+
+        setTimeout(() => {
+          fetchPosts(true);
+        }, backoffDelay);
+      } else {
+        setError("max_retries_exceeded");
+      }
     } finally {
-      setIsLoadingPosts(false);
+      if (!isRetry) {
+        setIsLoadingPosts(false);
+      }
     }
   };
 
@@ -806,22 +836,10 @@ export default function SocialScreen() {
         ]}
       >
         {/* Left - User Profile Pic */}
-        <TouchableOpacity onPress={() => router.push("/profile/profile-page")}>
-          <View
-            style={{
-              padding: 4,
-              borderRadius: 100,
-              borderWidth: 1.5,
-              borderColor: "#F5F378",
-              borderStyle: "dashed",
-            }}
-          >
-            <Image
-              source={{ uri: userProfilePic }}
-              style={[styles.profilePic, { borderWidth: 0 }]}
-            />
-          </View>
-        </TouchableOpacity>
+        <ProfilePicButton
+          profileImageUrl={userProfilePic}
+          isLoading={isLoadingPosts}
+        />
 
         {/* Middle - Logo */}
         <YallaLogo width={93} fill={theme.colors.text} />
@@ -834,82 +852,34 @@ export default function SocialScreen() {
 
   // Loading state while fetching posts
   const renderLoading = () => {
-    return (
-      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Text style={{ marginTop: 10, color: theme.colors.text }}>
-          {user ? "Loading posts..." : "Waiting for authentication..."}
-        </Text>
+    // Use skeleton loaders for loading state
+    const skeletonPosts = [1, 2]; // Show 2 skeleton posts
 
-        {!user && (
-          <Text
+    return (
+      <View style={{ flex: 1 }}>
+        {skeletonPosts.map((item, index) => (
+          <View
+            key={`skeleton-${item}`}
             style={{
-              marginTop: 5,
-              color: theme.colors.text,
-              opacity: 0.7,
-              textAlign: "center",
-              paddingHorizontal: 20,
+              paddingHorizontal: 15,
+              height: itemHeight,
+              paddingBottom: 20,
             }}
           >
-            Please wait while we authenticate your account. If this persists,
-            try logging out and back in.
-          </Text>
-        )}
+            <SocialPostSkeleton
+              height={itemHeight - 20}
+              delay={index * 150} // Stagger the animation
+            />
+          </View>
+        ))}
       </View>
     );
   };
 
   // Error state
   const renderError = () => {
-    return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: "center",
-          alignItems: "center",
-          padding: 20,
-        }}
-      >
-        <Icon name="AlertCircle" size={50} color="#FF3B30" />
-        <Text
-          style={{
-            marginTop: 10,
-            color: theme.colors.text,
-            textAlign: "center",
-          }}
-        >
-          {error ||
-            (user
-              ? "Something went wrong loading posts"
-              : "Authentication required")}
-        </Text>
-
-        {!user ? (
-          <Text
-            style={{
-              marginTop: 5,
-              color: theme.colors.text,
-              opacity: 0.7,
-              textAlign: "center",
-            }}
-          >
-            Please log in to view social posts
-          </Text>
-        ) : (
-          <TouchableOpacity
-            style={{
-              marginTop: 20,
-              padding: 10,
-              backgroundColor: theme.colors.primary,
-              borderRadius: 8,
-            }}
-            onPress={fetchPosts}
-          >
-            <Text style={{ color: "#fff" }}>Try Again</Text>
-          </TouchableOpacity>
-        )}
-      </View>
-    );
+    // Instead of showing error message, show empty state
+    return <EmptyStateSocial isLoggedIn={!!user} />;
   };
 
   // Calculate the content offset to account for the refresh spinner
@@ -1078,8 +1048,10 @@ export default function SocialScreen() {
       >
         {isLoadingPosts && posts.length === 0 ? (
           renderLoading()
-        ) : error ? (
+        ) : error === "max_retries_exceeded" ? (
           renderError()
+        ) : posts.length === 0 ? (
+          <EmptyStateSocial isLoggedIn={!!user} />
         ) : (
           /* Posts FlatList */
           <Animated.FlatList
@@ -1091,17 +1063,16 @@ export default function SocialScreen() {
             showsVerticalScrollIndicator={false}
             snapToInterval={itemHeight}
             snapToAlignment="start"
-            decelerationRate={0.85} // Changed from "fast" to a numeric value for more control
+            decelerationRate={0.85}
             disableIntervalMomentum={true}
             onScroll={handleScroll}
             onScrollEndDrag={handleScrollEndDrag}
             onMomentumScrollEnd={handleMomentumScrollEnd}
             scrollEnabled={!touchDisabled}
             contentContainerStyle={{
-              paddingBottom: POST_PEEK_AMOUNT, // Add bottom padding to account for peeking
+              paddingBottom: POST_PEEK_AMOUNT,
             }}
             ListFooterComponent={posts.length > 0 ? renderFooter : null}
-            ListEmptyComponent={<EmptyStateSocial isLoggedIn={!!user} />}
           />
         )}
       </View>
@@ -1123,14 +1094,7 @@ const styles = StyleSheet.create({
     width: "100%",
     zIndex: 100,
   },
-  profilePic: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1.5,
-    borderColor: "rgba(255,255,255,0.6)",
-    borderStyle: "dashed",
-  },
+
   logo: {
     fontSize: 24,
     fontFamily: "playfair-display-bold",

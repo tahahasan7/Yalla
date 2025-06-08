@@ -20,6 +20,7 @@ interface ProfileAvatarProps {
   borderRadius?: number;
   onPress?: () => void;
   disabled?: boolean;
+  onImageLoad?: () => void;
 }
 
 const ProfileAvatar: React.FC<ProfileAvatarProps> = ({
@@ -33,6 +34,7 @@ const ProfileAvatar: React.FC<ProfileAvatarProps> = ({
   borderRadius,
   onPress,
   disabled = false,
+  onImageLoad,
 }) => {
   const uri = imageUri || (user ? getProfileImage(user) : null);
 
@@ -68,6 +70,7 @@ const ProfileAvatar: React.FC<ProfileAvatarProps> = ({
             },
             imageStyle,
           ]}
+          onLoad={onImageLoad}
         />
       )}
     </Container>

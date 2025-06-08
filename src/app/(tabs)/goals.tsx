@@ -2,9 +2,9 @@ import AddUserHeaderButton from "@/components/add-user/AddUserHeaderButton";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
+import { MotiView } from "moti";
 import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityIndicator,
   FlatList,
   StatusBar,
   StyleSheet,
@@ -17,6 +17,7 @@ import { ProfileAvatar } from "../../components/common";
 import GoalBottomSheet from "../../components/goals/bottomSheets/GoalBottomSheet";
 import QuoteBottomSheet from "../../components/goals/bottomSheets/QuoteBottomSheet";
 import GoalCard from "../../components/goals/GoalCard";
+import GoalCardSkeleton from "../../components/goals/skeletonLoader/GoalCardSkeleton";
 import { FontFamily } from "../../constants/fonts";
 import { DarkTheme, DefaultTheme } from "../../constants/theme";
 import { useAuth } from "../../hooks/useAuth";
@@ -55,6 +56,7 @@ export default function GoalsScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false); // Separate refreshing state
   const [error, setError] = useState<string | null>(null);
+  const [dataFetched, setDataFetched] = useState(false); // Track if data has been fetched at least once
 
   // Ref to track last refresh time to avoid too frequent refreshes
   const lastRefreshTimeRef = useRef<number>(0);
@@ -78,12 +80,14 @@ export default function GoalsScreen() {
         throw new Error(error.message);
       }
       setGoals(data);
+      setDataFetched(true); // Mark that data has been fetched at least once
 
       // Update last refresh time
       lastRefreshTimeRef.current = Date.now();
     } catch (err: any) {
       console.error("Error fetching goals:", err);
       setError("Failed to load goals. Please try again.");
+      setDataFetched(true); // Even on error, we've attempted a fetch
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -226,18 +230,11 @@ export default function GoalsScreen() {
   const HEADER_HEIGHT = 76;
   const HEADER_WITH_STATUSBAR = HEADER_HEIGHT + insets.top;
 
-  // Create Goal button component - extracted for reuse
-  const CreateGoalButton = () => (
-    <TouchableOpacity
-      style={styles.createGoalButton}
-      onPress={() => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-        router.push("/create-goal");
-      }}
-    >
-      <Text style={styles.createGoalButtonText}>Create Goal</Text>
-    </TouchableOpacity>
-  );
+  // Handle create goal navigation
+  const handleCreateGoal = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    router.push("/create-goal");
+  };
 
   // Render header with user profile, title, and buttons
   const renderHeader = () => {
@@ -286,18 +283,40 @@ export default function GoalsScreen() {
 
   // Render content based on loading/error state
   const renderContent = () => {
+    // Always show skeleton loader when loading is true
     if (loading) {
+      // Render skeleton list with staggered delays
+      const skeletonCards = [1, 2, 3, 4, 5]; // Dummy data for 5 skeleton cards
+
       return (
-        <View style={styles.centeredContainer}>
-          <ActivityIndicator size="large" color="#0E96FF" />
-          <Text style={styles.messageText}>Loading goals...</Text>
-        </View>
+        <FlatList
+          data={skeletonCards}
+          keyExtractor={(item) => `skeleton-${item}`}
+          contentContainerStyle={styles.goalsList}
+          renderItem={({ item, index }) => (
+            <GoalCardSkeleton
+              colorMode="dark"
+              delay={index * 150} // Stagger the animation by 150ms per card
+            />
+          )}
+          showsVerticalScrollIndicator={false}
+          numColumns={1}
+          contentInsetAdjustmentBehavior="automatic"
+          scrollIndicatorInsets={{ right: 1 }}
+          removeClippedSubviews={false}
+        />
       );
     }
 
-    if (error) {
+    // If there's an error and we've fetched data at least once
+    if (error && dataFetched) {
       return (
-        <View style={styles.centeredContainer}>
+        <MotiView
+          from={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: "timing", duration: 500 }}
+          style={styles.centeredContainer}
+        >
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity
             style={styles.retryButton}
@@ -310,38 +329,81 @@ export default function GoalsScreen() {
           >
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
-        </View>
+        </MotiView>
       );
     }
 
-    if (goals.length === 0) {
+    // Now we know loading is complete, there's no error, and we've fetched data at least once
+
+    // Check if there are no goals after fetch is complete
+    if (goals.length === 0 && dataFetched) {
       return (
-        <View style={styles.centeredContainer}>
+        <MotiView
+          from={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: "timing", duration: 500 }}
+          style={styles.centeredContainer}
+        >
           <Text style={styles.messageText}>
             No goals yet. Create your first goal!
           </Text>
-          <CreateGoalButton />
-        </View>
+          <TouchableOpacity
+            style={styles.createGoalButton}
+            onPress={handleCreateGoal}
+          >
+            <Text style={styles.createGoalButtonText}>Create Goal</Text>
+          </TouchableOpacity>
+        </MotiView>
       );
     }
 
-    if (filteredGoals.length === 0) {
+    // Check if filtered goals are empty for the selected tab (only if we've fetched data)
+    if (filteredGoals.length === 0 && dataFetched) {
       return (
-        <View style={styles.centeredContainer}>
+        <MotiView
+          from={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ type: "timing", duration: 500 }}
+          style={styles.centeredContainer}
+        >
           <Text style={styles.messageText}>No goals in this category</Text>
           <View style={styles.spacer} />
-          <CreateGoalButton />
-        </View>
+          <TouchableOpacity
+            style={styles.createGoalButton}
+            onPress={handleCreateGoal}
+          >
+            <Text style={styles.createGoalButtonText}>Create Goal</Text>
+          </TouchableOpacity>
+        </MotiView>
       );
     }
 
+    // If we have goals or if we haven't fetched data yet
     return (
       <FlatList
         data={filteredGoals}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.goalsList}
-        renderItem={({ item }) => (
-          <GoalCard goal={item} onLongPress={handleGoalLongPress} />
+        renderItem={({ item, index }) => (
+          <MotiView
+            from={{
+              opacity: 0,
+              translateY: 20,
+              scale: 0.9,
+            }}
+            animate={{
+              opacity: 1,
+              translateY: 0,
+              scale: 1,
+            }}
+            transition={{
+              type: "timing",
+              duration: 500,
+              delay: index * 100, // Stagger the animation
+            }}
+          >
+            <GoalCard goal={item} onLongPress={handleGoalLongPress} />
+          </MotiView>
         )}
         showsVerticalScrollIndicator={false}
         numColumns={1}
@@ -379,7 +441,7 @@ export default function GoalsScreen() {
           <View style={styles.titleRow}>
             <Text style={styles.headerTitle}>My Goals</Text>
 
-            {/* Add button moved next to title */}
+            {/* Add button */}
             <TouchableOpacity
               style={styles.addButton}
               activeOpacity={0.7}
