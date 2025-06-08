@@ -57,6 +57,39 @@ const FindFriendsTab: React.FC<FindFriendsTabProps> = ({
     return () => clearTimeout(delayDebounce);
   }, [searchQuery]);
 
+  // Preserve search results when component refreshes due to parent updates
+  useEffect(() => {
+    // Only re-search if we have an existing query and search results are empty
+    // This happens when the parent component refreshes the data
+    if (searchQuery.length > 0 && searchResults.length === 0 && !searching) {
+      searchUsers(searchQuery);
+    }
+  }, [JSON.stringify(friendRequests.map((req) => req.id))]);
+
+  // Update friendship statuses in search results when friend requests change
+  useEffect(() => {
+    // If we have search results and friend requests change,
+    // update the statuses of the search results without losing them
+    if (searchResults.length > 0) {
+      // Get friend request user IDs
+      const requestUserIds = friendRequests.map((request) => request.id);
+
+      // Update statuses of users in search results
+      setSearchResults((prevResults) => {
+        return prevResults.map((result) => {
+          // If this user is now in friend requests, update status to "requested"
+          if (requestUserIds.includes(result.id)) {
+            return {
+              ...result,
+              friendshipStatus: "requested",
+            };
+          }
+          return result;
+        });
+      });
+    }
+  }, [JSON.stringify(friendRequests.map((req) => req.id))]);
+
   // Search function
   const searchUsers = async (query: string) => {
     if (!user || !query) {
@@ -83,17 +116,35 @@ const FindFriendsTab: React.FC<FindFriendsTabProps> = ({
         (foundUser) => !requestUserIds.includes(foundUser.id)
       );
 
+      // Create a map of existing search results for quick lookup
+      const existingResultsMap = new Map();
+      searchResults.forEach((result) => {
+        existingResultsMap.set(result.id, result);
+      });
+
       // For each user in results, check friendship status
       const usersWithStatus: UserWithStatus[] = [];
 
       for (const foundUser of filteredData) {
-        const { status, isRequester } =
-          await friendService.checkFriendshipStatus(user.id, foundUser.id);
-        usersWithStatus.push({
-          ...foundUser,
-          friendshipStatus: status,
-          isRequester,
-        });
+        // If user already exists in current search results, use their existing status
+        // This prevents unnecessary API calls and status flickering
+        if (existingResultsMap.has(foundUser.id)) {
+          const existingUser = existingResultsMap.get(foundUser.id);
+          usersWithStatus.push({
+            ...foundUser,
+            friendshipStatus: existingUser.friendshipStatus,
+            isRequester: existingUser.isRequester,
+          });
+        } else {
+          // Only fetch status for new users not already in results
+          const { status, isRequester } =
+            await friendService.checkFriendshipStatus(user.id, foundUser.id);
+          usersWithStatus.push({
+            ...foundUser,
+            friendshipStatus: status,
+            isRequester,
+          });
+        }
       }
 
       setSearchResults(usersWithStatus);
@@ -154,8 +205,8 @@ const FindFriendsTab: React.FC<FindFriendsTabProps> = ({
         }
       }
 
-      // Refresh data to update UI
-      onRefreshData();
+      // We don't need to refresh the whole page since we've already updated the UI
+      // with an optimistic update
     } catch (err) {
       console.error("Unexpected error sending friend request:", err);
       // Revert optimistic update on unexpected error
@@ -185,24 +236,39 @@ const FindFriendsTab: React.FC<FindFriendsTabProps> = ({
           style: "destructive",
           onPress: async () => {
             try {
+              // Update the UI immediately for better user experience (optimistic update)
+              setSearchResults((prev) =>
+                prev.map((item) =>
+                  item.id === friendId
+                    ? { ...item, friendshipStatus: "none" }
+                    : item
+                )
+              );
+
               const { error } = await friendService.removeFriend(
                 user.id,
                 friendId
               );
 
-              if (!error) {
-                // Update the UI immediately
-                setSearchResults((prev) =>
-                  prev.map((item) =>
-                    item.id === friendId
-                      ? { ...item, friendshipStatus: "none" }
-                      : item
-                  )
+              if (error) {
+                console.error("Error canceling friend request:", error);
+                Alert.alert(
+                  "Error",
+                  "Failed to cancel friend request. Please try again."
                 );
-                onRefreshData();
+
+                // Refresh search results in case of error to ensure UI is in sync
+                searchUsers(searchQuery);
               }
             } catch (err) {
               console.error("Unexpected error canceling friend request:", err);
+              Alert.alert(
+                "Error",
+                "An unexpected error occurred. Please try again."
+              );
+
+              // Refresh search results in case of error
+              searchUsers(searchQuery);
             }
           },
         },
@@ -216,6 +282,15 @@ const FindFriendsTab: React.FC<FindFriendsTabProps> = ({
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
+    // Update UI immediately for better user experience (optimistic update)
+    setSearchResults((prev) =>
+      prev.map((item) =>
+        item.id === requesterId
+          ? { ...item, friendshipStatus: "accepted" }
+          : item
+      )
+    );
+
     try {
       const { error } = await friendService.acceptFriendRequest(
         user.id,
@@ -224,11 +299,20 @@ const FindFriendsTab: React.FC<FindFriendsTabProps> = ({
 
       if (error) {
         console.error("Error accepting friend request:", error);
-      } else {
-        onRefreshData();
+        Alert.alert(
+          "Error",
+          "Failed to accept friend request. Please try again."
+        );
+
+        // Refresh search results in case of error to ensure UI is in sync
+        searchUsers(searchQuery);
       }
     } catch (err) {
       console.error("Unexpected error accepting friend request:", err);
+      Alert.alert("Error", "An unexpected error occurred. Please try again.");
+
+      // Refresh search results in case of error
+      searchUsers(searchQuery);
     }
   };
 
@@ -238,6 +322,13 @@ const FindFriendsTab: React.FC<FindFriendsTabProps> = ({
 
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
+    // Update UI immediately for better user experience (optimistic update)
+    setSearchResults((prev) =>
+      prev.map((item) =>
+        item.id === requesterId ? { ...item, friendshipStatus: "none" } : item
+      )
+    );
+
     try {
       const { error } = await friendService.declineFriendRequest(
         user.id,
@@ -246,12 +337,83 @@ const FindFriendsTab: React.FC<FindFriendsTabProps> = ({
 
       if (error) {
         console.error("Error declining friend request:", error);
-      } else {
-        onRefreshData();
+        Alert.alert(
+          "Error",
+          "Failed to decline friend request. Please try again."
+        );
+
+        // Refresh search results in case of error to ensure UI is in sync
+        searchUsers(searchQuery);
       }
     } catch (err) {
       console.error("Unexpected error declining friend request:", err);
+      Alert.alert("Error", "An unexpected error occurred. Please try again.");
+
+      // Refresh search results in case of error
+      searchUsers(searchQuery);
     }
+  };
+
+  // Handle unfriend action
+  const handleUnfriend = async (friendId: string) => {
+    if (!user) return;
+
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    Alert.alert("Unfriend", "Are you sure you want to remove this friend?", [
+      {
+        text: "Cancel",
+        style: "cancel",
+      },
+      {
+        text: "Unfriend",
+        style: "destructive",
+        onPress: async () => {
+          try {
+            console.log(`Removing friend ${friendId}`);
+
+            // Immediately update UI for better user experience
+            setSearchResults((prev) =>
+              prev.map((item) =>
+                item.id === friendId
+                  ? { ...item, friendshipStatus: "none" }
+                  : item
+              )
+            );
+
+            const { error } = await friendService.removeFriend(
+              user.id,
+              friendId
+            );
+
+            if (error) {
+              console.error("Error removing friend:", error);
+              Alert.alert(
+                "Error",
+                "Failed to remove friend. Please try again."
+              );
+
+              // Refresh search results in case of error to ensure UI is in sync
+              searchUsers(searchQuery);
+            } else {
+              console.log("Successfully removed friend");
+
+              // We don't need to refresh the whole page since we've already updated the UI
+              // with an optimistic update
+            }
+          } catch (err) {
+            console.error("Unexpected error removing friend:", err);
+            Alert.alert(
+              "Error",
+              "An unexpected error occurred. Please try again."
+            );
+
+            // Refresh search results in case of error
+            searchUsers(searchQuery);
+          }
+        },
+      },
+    ]);
   };
 
   // Render friend request section
@@ -334,7 +496,7 @@ const FindFriendsTab: React.FC<FindFriendsTabProps> = ({
       <View style={styles.listContent}>
         {searchResults.map((item) => (
           <UserItem
-            key={`search-${item.id}-${item.friendshipStatus}-${item.isRequester}`}
+            key={`search-${item.id}-${item.friendshipStatus || "none"}`}
             id={item.id}
             name={item.name}
             username={item.username}
@@ -410,7 +572,7 @@ const FindFriendsTab: React.FC<FindFriendsTabProps> = ({
       return (
         <TouchableOpacity
           style={styles.unfriendButton}
-          onPress={() => console.log("Unfriend function should be called")}
+          onPress={() => handleUnfriend(item.id)}
         >
           <Text style={styles.unfriendButtonText}>Unfriend</Text>
         </TouchableOpacity>

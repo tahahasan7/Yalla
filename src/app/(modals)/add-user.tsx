@@ -179,8 +179,23 @@ export default function AddUserScreen() {
         },
         async (payload) => {
           logFriendshipPayload("DELETE", payload);
-          // Force an immediate refresh when a friendship is deleted
-          fetchData();
+
+          // Only fetch data if in friends tab or if it affects the friend requests
+          // This prevents refreshing when adding friends in the FindFriendsTab
+          if (activeTab === "friends") {
+            fetchData();
+          } else {
+            // Only fetch friend requests to update that part of the state
+            try {
+              const { data: requestsData } =
+                await friendService.getFriendRequests(user.id);
+              if (requestsData) {
+                setFriendRequests(requestsData);
+              }
+            } catch (err) {
+              console.error("Error updating friend requests:", err);
+            }
+          }
         }
       )
       .on(
@@ -209,16 +224,59 @@ export default function AddUserScreen() {
             return;
           }
 
-          // Immediately fetch the latest data
-          fetchData();
+          // Check if this is a new friend request sent FROM the current user
+          const isSentFriendRequest =
+            payload.eventType === "INSERT" &&
+            newRecord?.status === "pending" &&
+            newRecord?.user_id === user.id;
 
-          // Check for new friend requests
+          // If it's a friend request the user just sent, don't refresh the entire screen
+          if (isSentFriendRequest && activeTab === "requests") {
+            // Skip refresh to avoid losing search results
+            return;
+          }
+
+          // Check for new friend requests received BY the current user
           if (
             payload.eventType === "INSERT" &&
             newRecord?.status === "pending" &&
             newRecord?.friend_id === user.id
           ) {
             setHasNewRequests(true);
+
+            // Only update the friend requests list, not the entire screen
+            try {
+              const { data: requestsData } =
+                await friendService.getFriendRequests(user.id);
+              if (requestsData) {
+                setFriendRequests(requestsData);
+              }
+            } catch (err) {
+              console.error("Error updating friend requests:", err);
+            }
+            return;
+          }
+
+          // If user is in the friends tab, or if this is an accepted friend request,
+          // do a full refresh
+          if (
+            activeTab === "friends" ||
+            (newRecord?.status === "accepted" &&
+              (newRecord?.user_id === user.id ||
+                newRecord?.friend_id === user.id))
+          ) {
+            fetchData();
+          } else {
+            // Otherwise, just update the friend requests to avoid losing search results
+            try {
+              const { data: requestsData } =
+                await friendService.getFriendRequests(user.id);
+              if (requestsData) {
+                setFriendRequests(requestsData);
+              }
+            } catch (err) {
+              console.error("Error updating friend requests:", err);
+            }
           }
         }
       )

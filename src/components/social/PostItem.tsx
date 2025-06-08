@@ -506,11 +506,6 @@ const PostItem = ({
                             size={16}
                           />
                         </Animated.View>
-                        {isPlaying && (
-                          <View style={styles.playingIndicator}>
-                            <Ionicons name="pause" color="white" size={12} />
-                          </View>
-                        )}
                       </View>
                     </TouchableOpacity>
                   </View>
@@ -713,19 +708,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  playingIndicator: {
-    position: "absolute",
-    top: -3,
-    right: -3,
-    backgroundColor: "white",
-    borderRadius: 8,
-    width: 12,
-    height: 12,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#000",
-  },
+
   likeContainer: {
     flexDirection: "column",
     justifyContent: "flex-end",
