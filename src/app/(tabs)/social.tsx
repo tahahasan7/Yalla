@@ -897,8 +897,10 @@ export default function SocialScreen() {
           await AudioModule.setIsAudioActiveAsync(true);
 
           // Fetch posts when screen comes into focus if user is logged in
+          // but don't show loading spinner
           if (user) {
-            fetchPosts();
+            // Use a silent fetch that doesn't show the loading spinner
+            fetchPostsQuietly();
           }
         } catch (error) {
           console.error("Error activating audio:", error);
@@ -964,6 +966,205 @@ export default function SocialScreen() {
       authListener?.subscription?.unsubscribe();
     };
   }, []);
+
+  /**
+   * Fetch posts without showing loading indicator
+   * Used when returning to the screen to avoid spinner
+   */
+  const fetchPostsQuietly = async () => {
+    // Don't set isLoadingPosts to true here
+    setError(null);
+
+    if (!user) {
+      return;
+    }
+
+    try {
+      // Get the user's friends
+      const { data: friendsData, error: friendsError } = await supabase
+        .from("friendships")
+        .select("user_id, friend_id")
+        .or(`user_id.eq.${user.id},friend_id.eq.${user.id}`)
+        .eq("status", "accepted");
+
+      if (friendsError) throw friendsError;
+
+      // Extract friend IDs
+      const friendIds =
+        friendsData?.map((friendship) =>
+          friendship.user_id === user.id
+            ? friendship.friend_id
+            : friendship.user_id
+        ) || [];
+
+      // Fetch posts from friends
+      const { data: socialPosts, error: socialPostsError } = await supabase
+        .from("social_posts")
+        .select("*")
+        .in("user_id", friendIds)
+        .order("created_at", { ascending: false });
+
+      if (socialPostsError) throw socialPostsError;
+
+      if (!socialPosts || socialPosts.length === 0) {
+        setPosts([]);
+        // Reset retry count on successful fetch (even if no posts)
+        setRetryCount(0);
+        return;
+      }
+
+      // Get related data in parallel for better performance
+      const goalIds = socialPosts.map((post) => post.goal_id).filter(Boolean);
+      const goalLogIds = socialPosts
+        .map((post) => post.goal_log_id)
+        .filter(Boolean);
+      const postUserIds = socialPosts
+        .map((post) => post.user_id)
+        .filter(Boolean);
+
+      // Fetch all related data in parallel
+      const [goalsResult, goalLogsResult, usersResult] = await Promise.all([
+        goalIds.length > 0
+          ? supabase.from("goals").select("*").in("id", goalIds)
+          : { data: [], error: null },
+        goalLogIds.length > 0
+          ? supabase.from("goal_logs").select("*").in("id", goalLogIds)
+          : { data: [], error: null },
+        postUserIds.length > 0
+          ? supabase.from("users").select("*").in("id", postUserIds)
+          : { data: [], error: null },
+      ]);
+
+      // Handle any errors
+      if (goalsResult.error)
+        console.error("Error fetching goals:", goalsResult.error);
+      if (goalLogsResult.error)
+        console.error("Error fetching goal logs:", goalLogsResult.error);
+      if (usersResult.error)
+        console.error("Error fetching users:", usersResult.error);
+
+      // Create lookup maps for faster access
+      const goalsMap = (goalsResult.data || []).reduce((map, goal) => {
+        map[goal.id] = goal;
+        return map;
+      }, {});
+
+      const goalLogsMap = (goalLogsResult.data || []).reduce((map, log) => {
+        map[log.id] = log;
+        return map;
+      }, {});
+
+      const usersMap = (usersResult.data || []).reduce((map, userData) => {
+        map[userData.id] = userData;
+        return map;
+      }, {});
+
+      // Transform data to match Post interface
+      const formattedPosts = socialPosts
+        .map((post) => {
+          try {
+            const goal = goalsMap[post.goal_id];
+            const goalLog = goalLogsMap[post.goal_log_id];
+            const postUser = usersMap[post.user_id];
+
+            // Default values
+            const defaultImageUrl = "https://via.placeholder.com/400";
+            const defaultUserName = "User";
+            const defaultUserPic = "https://via.placeholder.com/150";
+            const defaultGoalName = "Goal";
+
+            // Calculate week number
+            let weekNumber = 1;
+            try {
+              if (goal?.start_date) {
+                const startDate = new Date(goal.start_date);
+                const postDate = new Date(post.created_at);
+                const diffDays = Math.ceil(
+                  Math.abs(postDate.getTime() - startDate.getTime()) /
+                    (1000 * 60 * 60 * 24)
+                );
+                weekNumber = Math.ceil(diffDays / 7);
+              } else if (goalLog?.week) {
+                weekNumber = parseInt(goalLog.week.replace(/\D/g, "")) || 1;
+              }
+            } catch (err) {
+              console.error("Error calculating week number:", err);
+            }
+
+            // Parse music track data
+            const { songName, artistName, audioUrl, coverUrl } =
+              processMusicTrack(post.music_track);
+
+            // Process profile picture URL
+            let userProfilePic = defaultUserPic;
+            if (postUser?.profile_pic_url) {
+              if (
+                postUser.profile_pic_url.includes(
+                  "gyigpabcwedkwkfaxuxp.supabase.co"
+                ) ||
+                postUser.profile_pic_url.startsWith("http")
+              ) {
+                userProfilePic = postUser.profile_pic_url;
+              } else {
+                userProfilePic = `https://gyigpabcwedkwkfaxuxp.supabase.co/storage/v1/object/public/avatars/${postUser.profile_pic_url}`;
+              }
+            } else if (postUser?.name) {
+              const initial = postUser.name.charAt(0).toUpperCase();
+              userProfilePic = `https://ui-avatars.com/api/?name=${initial}&background=0E96FF&color=fff&size=256`;
+            } else if (postUser?.email) {
+              const initial = postUser.email.charAt(0).toUpperCase();
+              userProfilePic = `https://ui-avatars.com/api/?name=${initial}&background=0E96FF&color=fff&size=256`;
+            }
+
+            return {
+              id: post.id,
+              user: {
+                name: postUser?.name || defaultUserName,
+                profilePic: userProfilePic,
+                flowState: "still" as
+                  | "still"
+                  | "kindling"
+                  | "flowing"
+                  | "glowing",
+              },
+              imageUrl: post.image_url || defaultImageUrl,
+              goal: {
+                type: (goal?.type || goalLog?.goal_type || "solo") as
+                  | "solo"
+                  | "group",
+                name: goal?.name || goal?.title || defaultGoalName,
+                message: goal?.message || "",
+                week: weekNumber,
+                date: new Date(post.created_at).toLocaleDateString(),
+              },
+              song: {
+                name: songName,
+                artist: artistName,
+                coverUrl: coverUrl,
+                audioUrl: audioUrl,
+              },
+              likes: 0,
+              caption: post.caption || "",
+              comments: 0,
+              timestamp: post.created_at,
+            };
+          } catch (err) {
+            console.error("Error formatting post:", post.id, err);
+            return null;
+          }
+        })
+        .filter((post) => post !== null);
+
+      // Update state with formatted posts
+      setPosts(formattedPosts);
+
+      // Reset retry count on successful fetch
+      setRetryCount(0);
+    } catch (error: any) {
+      console.error("Error fetching posts quietly:", error);
+      // Don't show errors or retry for quiet fetches
+    }
+  };
 
   return (
     <View

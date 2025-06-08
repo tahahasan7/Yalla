@@ -29,9 +29,7 @@ const EmptyStateSocial: React.FC<EmptyStateSocialProps> = ({ isLoggedIn }) => {
 
               {/* Actual image */}
               <Image
-                source={{
-                  uri: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?q=80&w=2070",
-                }}
+                source={require("../../../../assets/images/mountain.jpeg")}
                 style={styles.cardImage}
               />
             </View>
@@ -43,9 +41,7 @@ const EmptyStateSocial: React.FC<EmptyStateSocialProps> = ({ isLoggedIn }) => {
 
               {/* Actual image */}
               <Image
-                source={{
-                  uri: "https://images.unsplash.com/photo-1520250497591-112f2f40a3f4?q=80&w=2070",
-                }}
+                source={require("../../../../assets/images/water.jpeg")}
                 style={styles.cardImage}
               />
             </View>
@@ -54,9 +50,7 @@ const EmptyStateSocial: React.FC<EmptyStateSocialProps> = ({ isLoggedIn }) => {
             <View style={[styles.frontCard, styles.card]}>
               {/* Actual image */}
               <Image
-                source={{
-                  uri: "https://images.unsplash.com/photo-1571401835393-8c5f35328320?q=80&w=1974",
-                }}
+                source={require("../../../../assets/images/clothes.jpeg")}
                 style={styles.cardImage}
               />
 
