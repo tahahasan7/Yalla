@@ -36,6 +36,7 @@ import audioManager from "../../lib/audioManager";
 // Import music data for audio playback
 import { AUDIO_TRACK_MAP } from "../../constants/musicData";
 // Import Post type from types
+import AddUserHeaderButton from "@/components/add-user/AddUserHeaderButton";
 import { Post } from "../../types/social";
 
 // Define types for props
@@ -826,19 +827,7 @@ export default function SocialScreen() {
         <YallaLogo width={93} fill={theme.colors.text} />
 
         {/* Right - Add User Button */}
-        <TouchableOpacity
-          style={styles.addUserButton}
-          hitSlop={10}
-          onPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-            router.push("/add-user");
-          }}
-        >
-          <Icon name="AddUser" size={36} color={theme.colors.text} />
-
-          {/* Friend request notification badge */}
-          {friendRequests > 0 && <View style={styles.requestBadge}></View>}
-        </TouchableOpacity>
+        <AddUserHeaderButton hasFriendRequests={friendRequests > 0} />
       </View>
     );
   };

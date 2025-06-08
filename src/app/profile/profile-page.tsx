@@ -1,3 +1,4 @@
+import AddUserHeaderButton from "@/components/add-user/AddUserHeaderButton";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
@@ -7,20 +8,27 @@ import {
   FlatList,
   Image,
   Platform,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Icon, ProfileAvatar } from "../../components/common";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import { ProfileAvatar } from "../../components/common";
 import { FontFamily } from "../../constants/fonts";
 import { DarkTheme, DefaultTheme } from "../../constants/theme";
-import { getProfileImage, useAuth } from "../../hooks/useAuth";
+import { useAuth } from "../../hooks/useAuth";
 import { useColorScheme } from "../../hooks/useColorScheme";
-import { Post } from "../../types/social";
+
+// Define a simplified type for profile post previews
+interface PostPreview {
+  id: string;
+  imageUrl: string;
+}
 
 // Screen dimensions
 const { width } = Dimensions.get("window");
@@ -28,88 +36,22 @@ const NUM_COLUMNS = 3;
 const ITEM_WIDTH = width / NUM_COLUMNS;
 const ITEM_HEIGHT = ITEM_WIDTH;
 
-// Stats for the user
-const USER_STATS = {
-  posts: 106,
-  goalsStarted: 24,
-  goalsInFlow: 8,
-};
-
 // Sample posts with architecture images
-const USER_POSTS: Post[] = [
+const USER_POSTS: PostPreview[] = [
   {
     id: "1",
     imageUrl:
       "https://i.pinimg.com/736x/ee/97/ff/ee97ff155e5de256d7faadbc15f054bd.jpg",
-
-    user: {
-      name: "User",
-      profilePic: "https://randomuser.me/api/portraits/women/11.jpg",
-      flowState: "flowing",
-    },
-    goal: {
-      type: "solo",
-      name: "Studying",
-      message: "Here we go again! Loving the morning air.",
-      week: 3,
-      date: "April 21, 2025",
-    },
-    song: {
-      name: "Weight of My Love",
-      artist: "Amick Cutler",
-      coverUrl:
-        "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxzZWFyY2h8Mnx8bXVzaWN8ZW58MHwxfDB8fA%3D%3D&w=1000&q=80",
-      audioUrl: null,
-    },
-    likes: 243,
   },
   {
-    id: "5",
+    id: "2",
     imageUrl:
       "https://images.unsplash.com/photo-1511818966892-d7d671e672a2?q=80&w=1000",
-    user: {
-      name: "User",
-      profilePic: "https://randomuser.me/api/portraits/men/32.jpg",
-      flowState: "glowing",
-    },
-    goal: {
-      type: "solo",
-      name: "Photography",
-      message: "Urban exploration today",
-      week: 2,
-      date: "April 15, 2025",
-    },
-    song: {
-      name: "City Lights",
-      artist: "Daft Punk",
-      coverUrl: "https://picsum.photos/100/100",
-      audioUrl: null,
-    },
-    likes: 342,
   },
   {
-    id: "6",
+    id: "3",
     imageUrl:
       "https://images.unsplash.com/photo-1486718448742-163732cd1544?q=80&w=1000",
-    user: {
-      name: "User",
-      profilePic: "https://randomuser.me/api/portraits/men/32.jpg",
-      flowState: "flowing",
-    },
-    goal: {
-      type: "solo",
-      name: "Architecture",
-      message: "Modern design inspirations",
-      week: 3,
-      date: "April 12, 2025",
-    },
-    song: {
-      name: "Concrete Jungle",
-      artist: "Bob Marley",
-      coverUrl: "https://picsum.photos/100/100",
-      audioUrl: null,
-    },
-    likes: 523,
   },
 ];
 
@@ -119,29 +61,27 @@ export default function ProfilePage() {
   const theme = colorScheme === "dark" ? DarkTheme : DefaultTheme;
   const router = useRouter();
   const { user, loading } = useAuth();
-  const [userPosts, setUserPosts] = useState<Post[]>([]);
+  const [userPosts, setUserPosts] = useState<PostPreview[]>([]);
   const [postsLoading, setPostsLoading] = useState(true);
 
   // Update posts with correct user data
   useEffect(() => {
     if (user) {
       // In a real app, you would fetch actual posts from Supabase here
-      // For now, we'll just update the mock data with the user's info
-      const updatedPosts = USER_POSTS.map((post) => ({
-        ...post,
-        user: {
-          ...post.user,
-          name: user.name || "User",
-          profilePic: getProfileImage(user),
-        },
-      }));
-      setUserPosts(updatedPosts);
+      // For now, we'll just use our simplified mock data
+      setUserPosts(USER_POSTS);
       setPostsLoading(false);
     }
   }, [user]);
 
   // Render post item in grid
-  const renderPostItem = ({ item, index }: { item: Post; index: number }) => {
+  const renderPostItem = ({
+    item,
+    index,
+  }: {
+    item: PostPreview;
+    index: number;
+  }) => {
     return (
       <TouchableOpacity style={styles.postItem} activeOpacity={0.8}>
         <Image source={{ uri: item.imageUrl }} style={styles.postImage} />
@@ -221,13 +161,7 @@ export default function ProfilePage() {
           </TouchableOpacity>
 
           <View style={styles.headerRightButtons}>
-            <TouchableOpacity
-              style={styles.headerButton}
-              hitSlop={10}
-              onPress={() => router.push("/add-user")}
-            >
-              <Icon name="AddUser" size={36} color={theme.colors.text} />
-            </TouchableOpacity>
+            <AddUserHeaderButton />
             <TouchableOpacity
               style={styles.optionsButton}
               onPress={() => router.push("/profile/settings")}
@@ -342,20 +276,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontFamily: FontFamily.SemiBold,
-  },
   backButton: {
     padding: 8,
   },
   headerRightButtons: {
     flexDirection: "row",
     alignItems: "center",
-  },
-  headerButton: {
-    padding: 8,
-    marginRight: 8,
   },
   optionsButton: {
     padding: 8,

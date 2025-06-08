@@ -1,3 +1,4 @@
+import AddUserHeaderButton from "@/components/add-user/AddUserHeaderButton";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { router, useLocalSearchParams } from "expo-router";
@@ -12,7 +13,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Icon, ProfileAvatar } from "../../components/common";
+import { ProfileAvatar } from "../../components/common";
 import GoalBottomSheet from "../../components/goals/bottomSheets/GoalBottomSheet";
 import QuoteBottomSheet from "../../components/goals/bottomSheets/QuoteBottomSheet";
 import GoalCard from "../../components/goals/GoalCard";
@@ -277,20 +278,7 @@ export default function GoalsScreen() {
         {/* Right Side - Add Friend Button */}
         <View style={styles.rightContainer}>
           {/* Add friend button */}
-          <TouchableOpacity
-            style={styles.addFriendButton}
-            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-            activeOpacity={0.7}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              router.push("/add-user");
-            }}
-          >
-            <Icon name="AddUser" size={36} color={theme.colors.text} />
-
-            {/* Friend request notification badge */}
-            {friendRequests > 0 && <View style={styles.requestBadge}></View>}
-          </TouchableOpacity>
+          <AddUserHeaderButton hasFriendRequests={friendRequests > 0} />
         </View>
       </View>
     );
@@ -554,11 +542,6 @@ const styles = StyleSheet.create({
     fontFamily: FontFamily.SemiBold,
     fontSize: 14,
   },
-  addFriendButton: {
-    justifyContent: "center",
-    alignItems: "center",
-    position: "relative",
-  },
   addButton: {
     width: 36,
     height: 36,
@@ -672,17 +655,6 @@ const styles = StyleSheet.create({
     color: "white",
     fontFamily: FontFamily.SemiBold,
     fontSize: 14,
-  },
-  requestBadge: {
-    position: "absolute",
-    top: -2,
-    right: -2,
-    backgroundColor: "#FF3B30", // Change to red for better visibility
-    borderRadius: 4,
-    width: 8,
-    height: 8,
-    borderWidth: 1,
-    borderColor: "#FFFFFF",
   },
   spacer: {
     height: 10,
