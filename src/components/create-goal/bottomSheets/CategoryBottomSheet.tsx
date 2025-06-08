@@ -1,5 +1,5 @@
+import { CATEGORIES } from "@/constants/categories";
 import { FontFamily } from "@/constants/fonts";
-import { CATEGORIES } from "@/constants/goalData";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useRef, useState } from "react";
 import {

@@ -16,7 +16,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import { CATEGORIES, Goal, GOALS } from "../../constants/goalData";
+import { CATEGORIES } from "../../constants/categories";
 import { Icon } from "../common";
 import FlowStateIcon from "../social/FlowStateIcon";
 
@@ -100,8 +100,8 @@ const SelectGoalButton = forwardRef<
     const goalSelectorAnim = useRef(new Animated.Value(0)).current;
     const goalSelectorHeight = useRef(new Animated.Value(0)).current;
 
-    // Use provided goals if available, otherwise use GOALS from constants
-    const activeGoals = goals ? goals : GOALS.filter((goal) => !goal.completed);
+    // Use provided goals or an empty array if none provided
+    const activeGoals = goals ? goals.filter((goal) => !goal.completed) : [];
 
     // Toggle goal selector
     function toggleGoalSelector() {
@@ -150,7 +150,7 @@ const SelectGoalButton = forwardRef<
     }));
 
     // Select a goal
-    function selectGoal(goal: Goal) {
+    function selectGoal(goal: any) {
       // Haptic feedback removed
       onSelectGoal(goal);
       toggleGoalSelector();

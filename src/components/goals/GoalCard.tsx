@@ -9,8 +9,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { CATEGORIES } from "../../constants/categories";
 import { FontFamily } from "../../constants/fonts";
-import { CATEGORIES } from "../../constants/goalData";
 import { GoalWithDetails } from "../../services/goalService";
 import { Icon, ProfileAvatar } from "../common";
 import FlowStateIcon from "../social/FlowStateIcon";

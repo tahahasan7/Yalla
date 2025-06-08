@@ -17,7 +17,6 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon, ProfileAvatar } from "../../components/common";
 import { FontFamily } from "../../constants/fonts";
-import { POSTS } from "../../constants/socialData";
 import { DarkTheme, DefaultTheme } from "../../constants/theme";
 import { getProfileImage, useAuth } from "../../hooks/useAuth";
 import { useColorScheme } from "../../hooks/useColorScheme";
@@ -38,7 +37,32 @@ const USER_STATS = {
 
 // Sample posts with architecture images
 const USER_POSTS: Post[] = [
-  ...POSTS,
+  {
+    id: "1",
+    imageUrl:
+      "https://i.pinimg.com/736x/ee/97/ff/ee97ff155e5de256d7faadbc15f054bd.jpg",
+
+    user: {
+      name: "User",
+      profilePic: "https://randomuser.me/api/portraits/women/11.jpg",
+      flowState: "flowing",
+    },
+    goal: {
+      type: "solo",
+      name: "Studying",
+      message: "Here we go again! Loving the morning air.",
+      week: 3,
+      date: "April 21, 2025",
+    },
+    song: {
+      name: "Weight of My Love",
+      artist: "Amick Cutler",
+      coverUrl:
+        "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?ixlib=rb-4.0.3&ixid=MnwxMjA3fDB8MHxzZWFyY2h8Mnx8bXVzaWN8ZW58MHwxfDB8fA%3D%3D&w=1000&q=80",
+      audioUrl: null,
+    },
+    likes: 243,
+  },
   {
     id: "5",
     imageUrl:
@@ -59,6 +83,7 @@ const USER_POSTS: Post[] = [
       name: "City Lights",
       artist: "Daft Punk",
       coverUrl: "https://picsum.photos/100/100",
+      audioUrl: null,
     },
     likes: 342,
   },
@@ -82,6 +107,7 @@ const USER_POSTS: Post[] = [
       name: "Concrete Jungle",
       artist: "Bob Marley",
       coverUrl: "https://picsum.photos/100/100",
+      audioUrl: null,
     },
     likes: 523,
   },

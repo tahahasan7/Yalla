@@ -27,8 +27,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Icon } from "../../components/common";
 import SelectGoalButton from "../../components/goal-camera/SelectGoalButton";
-import { CATEGORIES } from "../../constants/goalData";
-import { NAVBAR_HEIGHT } from "../../constants/socialData";
+import { CATEGORIES } from "../../constants/categories";
+import { NAVBAR_HEIGHT } from "../../constants/layoutConstants";
 import { DarkTheme, DefaultTheme } from "../../constants/theme";
 import { useColorScheme } from "../../hooks/useColorScheme";
 import { goalService } from "../../services/goalService";

@@ -1,8 +1,8 @@
 import { Icon } from "@/components/common";
 import DeleteButton from "@/components/goals/bottomSheets/DeleteButton";
 import FlowStateIcon from "@/components/social/FlowStateIcon";
+import { CATEGORIES } from "@/constants/categories";
 import { FontFamily } from "@/constants/fonts";
-import { CATEGORIES } from "@/constants/goalData";
 import { goalService, GoalWithDetails } from "@/services/goalService";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";

@@ -18,15 +18,15 @@ const App = () => {
     const loadFonts = async () => {
       try {
         await Font.loadAsync({
-          "Outfit-Thin": require("./src/assets/fonts/Outfit-Thin.ttf"),
-          "Outfit-ExtraLight": require("./src/assets/fonts/Outfit-ExtraLight.ttf"),
-          "Outfit-Light": require("./src/assets/fonts/Outfit-Light.ttf"),
-          "Outfit-Regular": require("./src/assets/fonts/Outfit-Regular.ttf"),
-          "Outfit-Medium": require("./src/assets/fonts/Outfit-Medium.ttf"),
-          "Outfit-SemiBold": require("./src/assets/fonts/Outfit-SemiBold.ttf"),
-          "Outfit-Bold": require("./src/assets/fonts/Outfit-Bold.ttf"),
-          "Outfit-ExtraBold": require("./src/assets/fonts/Outfit-ExtraBold.ttf"),
-          "Outfit-Black": require("./src/assets/fonts/Outfit-Black.ttf"),
+          "Outfit-Thin": require("./assets/fonts/Outfit-Thin.ttf"),
+          "Outfit-ExtraLight": require("./assets/fonts/Outfit-ExtraLight.ttf"),
+          "Outfit-Light": require("./assets/fonts/Outfit-Light.ttf"),
+          "Outfit-Regular": require("./assets/fonts/Outfit-Regular.ttf"),
+          "Outfit-Medium": require("./assets/fonts/Outfit-Medium.ttf"),
+          "Outfit-SemiBold": require("./assets/fonts/Outfit-SemiBold.ttf"),
+          "Outfit-Bold": require("./assets/fonts/Outfit-Bold.ttf"),
+          "Outfit-ExtraBold": require("./assets/fonts/Outfit-ExtraBold.ttf"),
+          "Outfit-Black": require("./assets/fonts/Outfit-Black.ttf"),
         });
         setFontsLoaded(true);
       } catch (e) {

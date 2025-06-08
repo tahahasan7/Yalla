@@ -9,7 +9,23 @@
       "distribution": "internal"
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "ios": {
+        "simulator": false,
+        "buildConfiguration": "Debug"
+      },
+      "android": {
+        "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://dev-api.example.com"
+      },
+      "channel": "preview"
+    },
+    "development-build": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "channel": "development"
     },
     "production": {
       "autoIncrement": true

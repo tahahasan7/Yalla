@@ -17,15 +17,19 @@ import GoalBottomSheet from "../../components/goals/bottomSheets/GoalBottomSheet
 import QuoteBottomSheet from "../../components/goals/bottomSheets/QuoteBottomSheet";
 import GoalCard from "../../components/goals/GoalCard";
 import { FontFamily } from "../../constants/fonts";
-import { GOAL_TABS } from "../../constants/goalData";
 import { DarkTheme, DefaultTheme } from "../../constants/theme";
 import { useAuth } from "../../hooks/useAuth";
 import { useColorScheme } from "../../hooks/useColorScheme";
 import { supabase } from "../../lib/supabase";
 import { goalService, GoalWithDetails } from "../../services/goalService";
 
-// Modified Tab options - rearranged with "Completed" at the end
-const TABS = GOAL_TABS;
+// Tab options for goals screen
+const TABS = [
+  { id: "all", title: "All" },
+  { id: "solo", title: "Solo" },
+  { id: "group", title: "Group" },
+  { id: "completed", title: "Completed" },
+];
 
 export default function GoalsScreen() {
   const params = useLocalSearchParams();

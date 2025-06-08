@@ -1,5 +1,5 @@
+import { CATEGORIES } from "@/constants/categories";
 import { FontFamily } from "@/constants/fonts";
-import { CATEGORIES } from "@/constants/goalData";
 import { useAuth } from "@/hooks/useAuth";
 import { goalService } from "@/services/goalService";
 import { Ionicons } from "@expo/vector-icons";

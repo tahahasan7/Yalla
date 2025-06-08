@@ -1,13 +1,5 @@
 // Types for Social Screen components
 
-// Animation values type
-export type AnimationValues = {
-  translateY: Animated.Value;
-  translateX: Animated.Value;
-  scale: Animated.Value;
-  rotate: Animated.Value;
-};
-
 // Post data type
 export interface Post {
   id: string;
@@ -32,35 +24,10 @@ export interface Post {
     spotifyUri?: string;
     spotifyUrl?: string;
   };
-  likes: number;
   caption?: string;
-  comments?: number;
-  timestamp?: string;
-}
-
-// Story item props
-export interface StoryItemProps {
-  item: Post;
-  index: number;
-  isActive: boolean;
-  storyScale: Animated.Value;
-  onPress: () => void;
 }
 
 // Flow state icon props
 export interface FlowStateIconProps {
   flowState: string;
 }
-
-// Heart particles props
-export interface HeartParticlesProps {
-  visible: boolean;
-}
-
-// Music player props
-export interface MusicPlayerProps {
-  visible: boolean;
-  item: Post;
-}
-
-import { Animated } from "react-native";

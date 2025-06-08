@@ -8,11 +8,9 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   Image,
   Keyboard,
   KeyboardAvoidingView,
-  Modal,
   Platform,
   SafeAreaView,
   ScrollView,
@@ -31,20 +29,13 @@ import { useColorScheme } from "../hooks/useColorScheme";
 import { supabase } from "../lib/supabase";
 import { goalService } from "../services/goalService";
 // Import audio player hooks
-import { useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
+import { AudioModule, useAudioPlayer, useAudioPlayerStatus } from "expo-audio";
 // Import music data from constants
-import {
-  AUDIO_TRACK_MAP,
-  formatTrackName,
-  MUSIC_TRACKS,
-} from "../constants/musicData";
-
-// Remove the dummy user data as we'll use the authenticated user
-// const USER = {
-//   name: "John Doe",
-//   username: "@johndoe",
-//   profilePic: "https://randomuser.me/api/portraits/men/32.jpg",
-// };
+import { AUDIO_TRACK_MAP, formatTrackName } from "../constants/musicData";
+// Import our components
+import MusicButton from "../components/post-sharing/bottomsheets/MusicButton";
+import MusicOverlay from "../components/post-sharing/MusicOverlay";
+import ShareOptionsPopup from "../components/post-sharing/ShareOptionsPopup";
 
 export default function PostSharingScreen() {
   const colorScheme = useColorScheme();
@@ -69,14 +60,39 @@ export default function PostSharingScreen() {
   const [showShareOptions, setShowShareOptions] = useState(false);
   const [captionError, setCaptionError] = useState("");
   const [selectedMusic, setSelectedMusic] = useState<string | null>(null);
-  const [showMusicPicker, setShowMusicPicker] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
 
   // Add state for audio preview
   const [previewingTrack, setPreviewingTrack] = useState<string | null>(null);
   const audioPlayer = useAudioPlayer(null);
   const audioStatus = useAudioPlayerStatus(audioPlayer);
   const isPlaying = audioStatus?.playing || false;
+
+  // Configure audio mode for both speaker and headset playback
+  useEffect(() => {
+    const configureAudio = async () => {
+      try {
+        // Set audio mode to enable playback through speakers
+        await AudioModule.setAudioModeAsync({
+          // Allow playback in silent mode (iOS)
+          playsInSilentMode: true,
+          // Don't route audio through earpiece (use speakers)
+          shouldRouteThroughEarpiece: false,
+          // Specify how audio session interacts with other apps
+          interruptionMode: "mixWithOthers",
+          interruptionModeAndroid: "duckOthers",
+          // Allow recording (not needed for playback only, but good to set)
+          allowsRecording: false,
+          // Don't keep audio active in background
+          shouldPlayInBackground: false,
+        });
+        console.log("Audio mode configured successfully");
+      } catch (error) {
+        console.error("Error configuring audio mode:", error);
+      }
+    };
+
+    configureAudio();
+  }, []);
 
   // Function to get the audio file path
   const getAudioFilePath = (trackName: string) => {
@@ -393,7 +409,10 @@ export default function PostSharingScreen() {
 
   // Handle toggling the share options dropdown
   const toggleShareOptions = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    // Only trigger haptic feedback when opening the dropdown, not closing
+    if (!showShareOptions) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    }
     setShowShareOptions(!showShareOptions);
   };
 
@@ -404,78 +423,19 @@ export default function PostSharingScreen() {
     setShowShareOptions(false);
   };
 
-  // Open music picker modal
-  const openMusicPicker = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setShowMusicPicker(true);
-  };
-
-  // Select a music track
-  const selectMusicTrack = (track: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    // Make sure the track exists in our map before selecting it
-    if (!AUDIO_TRACK_MAP[track]) {
-      console.warn(`Attempted to select unavailable track: ${track}`);
-      Alert.alert(
-        "Track Unavailable",
-        "This track is currently unavailable. Please select another track."
-      );
-      return;
-    }
-
+  // Handler for when a music track is selected
+  const handleMusicSelection = (track: string | null) => {
     setSelectedMusic(track);
-    setShowMusicPicker(false);
 
-    // Play the selected track
-    playTrack(track);
-  };
-
-  // Play selected music when component mounts if a track is selected
-  useEffect(() => {
-    if (selectedMusic && !previewingTrack) {
-      playTrack(selectedMusic);
-    }
-  }, []);
-
-  // Clear selected music
-  const clearSelectedMusic = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-
-    // Stop audio playback if it's playing
-    if (previewingTrack === selectedMusic && isPlaying) {
-      audioPlayer.pause();
-    }
-
-    setPreviewingTrack(null);
-    setSelectedMusic(null);
-  };
-
-  // Toggle preview playback for a track
-  const togglePreviewTrack = async (track: string) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-    try {
-      // If we're already playing this track, pause it
-      if (previewingTrack === track && isPlaying) {
-        await audioPlayer.pause();
-        return;
-      }
-
-      // If it's a different track or the same track but paused, play it
+    // If track is selected, play it
+    if (track) {
       playTrack(track);
-    } catch (error) {
-      console.error("Error toggling audio preview:", error);
-    }
-  };
-
-  // Stop audio preview when modal closes
-  useEffect(() => {
-    if (!showMusicPicker && previewingTrack) {
+    } else if (previewingTrack && isPlaying) {
+      // If clearing selection and audio is playing, stop it
       audioPlayer.pause();
       setPreviewingTrack(null);
     }
-  }, [showMusicPicker]);
+  };
 
   // Clean up audio when component unmounts
   useEffect(() => {
@@ -490,18 +450,6 @@ export default function PostSharingScreen() {
       }
     };
   }, []);
-
-  // Filter music tracks based on search query and ensure they exist in AUDIO_TRACK_MAP
-  const availableTracks = MUSIC_TRACKS.filter(
-    (track) => AUDIO_TRACK_MAP[track]
-  );
-
-  const filteredMusicTracks =
-    searchQuery.trim() === ""
-      ? availableTracks
-      : availableTracks.filter((track) =>
-          track.toLowerCase().includes(searchQuery.toLowerCase())
-        );
 
   return (
     <SafeAreaView
@@ -548,7 +496,7 @@ export default function PostSharingScreen() {
             </Text>
           </View>
 
-          {/* Share options dropdown next to user name */}
+          {/* Share options dropdown button */}
           <TouchableOpacity
             onPress={toggleShareOptions}
             style={styles.shareDropdownButton}
@@ -566,7 +514,7 @@ export default function PostSharingScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Scrollable Content - No need for extra padding now that we removed the music player bar */}
+        {/* Scrollable Content */}
         <ScrollView
           style={styles.scrollContainer}
           contentContainerStyle={styles.scrollContentContainer}
@@ -607,34 +555,11 @@ export default function PostSharingScreen() {
 
               {/* Add Music button - Only show when postToFeed is true */}
               {postToFeed && (
-                <View style={styles.musicSectionContainer}>
-                  {selectedMusic ? (
-                    <View style={styles.selectedMusicContainer}>
-                      <Ionicons
-                        name="musical-notes"
-                        size={18}
-                        color="#0E96FF"
-                      />
-                      <Text style={styles.selectedMusicText}>
-                        {formatTrackName(selectedMusic)}
-                      </Text>
-                      <TouchableOpacity
-                        onPress={clearSelectedMusic}
-                        style={styles.clearMusicButton}
-                      >
-                        <Ionicons name="close-circle" size={18} color="#888" />
-                      </TouchableOpacity>
-                    </View>
-                  ) : (
-                    <TouchableOpacity
-                      onPress={openMusicPicker}
-                      style={styles.addMusicButton}
-                    >
-                      <Ionicons name="add-circle" size={18} color="#0E96FF" />
-                      <Text style={styles.addMusicText}>Add Music</Text>
-                    </TouchableOpacity>
-                  )}
-                </View>
+                <MusicButton
+                  selectedMusic={selectedMusic}
+                  onSelectMusic={handleMusicSelection}
+                  formatTrackName={formatTrackName}
+                />
               )}
 
               {/* Image preview with goal badge overlaid */}
@@ -654,250 +579,30 @@ export default function PostSharingScreen() {
                   <Text style={styles.goalBadgeText}>{goalTitle}</Text>
                 </View>
 
-                {/* Show music icon on the image if music is selected */}
+                {/* Show music overlay on the image if music is selected */}
                 {selectedMusic && (
-                  <View style={styles.musicIconOverlay}>
-                    <TouchableOpacity
-                      style={styles.musicPlayButtonOverlay}
-                      onPress={async () => {
-                        try {
-                          if (isPlaying && previewingTrack === selectedMusic) {
-                            await audioPlayer.pause();
-                          } else {
-                            // Make sure we're set to preview the selected track
-                            if (previewingTrack !== selectedMusic) {
-                              playTrack(selectedMusic);
-                            } else {
-                              await audioPlayer.play();
-                            }
-                          }
-                        } catch (error) {
-                          console.error(
-                            "Error toggling music playback:",
-                            error
-                          );
-                        }
-                      }}
-                    >
-                      <Ionicons
-                        name={
-                          isPlaying && previewingTrack === selectedMusic
-                            ? "pause"
-                            : "play"
-                        }
-                        size={16}
-                        color="#fff"
-                      />
-                    </TouchableOpacity>
-                    <View style={styles.musicTextOverlay}>
-                      <Ionicons name="musical-notes" size={14} color="#fff" />
-                      <Text style={styles.musicOverlayText} numberOfLines={1}>
-                        {formatTrackName(selectedMusic)}
-                      </Text>
-                    </View>
-                  </View>
+                  <MusicOverlay
+                    selectedMusic={selectedMusic}
+                    formatTrackName={formatTrackName}
+                    audioPlayer={audioPlayer}
+                    previewingTrack={previewingTrack}
+                    setPreviewingTrack={setPreviewingTrack}
+                  />
                 )}
               </View>
             </View>
           </TouchableWithoutFeedback>
         </ScrollView>
 
-        {/* Dropdown modal for share options */}
-        {showShareOptions && (
-          <View style={styles.modalOverlay}>
-            <TouchableWithoutFeedback onPress={toggleShareOptions}>
-              <View style={styles.modalBackground} />
-            </TouchableWithoutFeedback>
-
-            <View
-              style={[
-                styles.optionsDropdown,
-                { backgroundColor: theme.colors.card },
-              ]}
-            >
-              <TouchableOpacity
-                style={[styles.optionItem, postToFeed && styles.selectedOption]}
-                onPress={() => selectShareOption(true)}
-              >
-                <View style={styles.optionContent}>
-                  <View
-                    style={[styles.optionIcon, { backgroundColor: "#5B8AF2" }]}
-                  >
-                    <Ionicons name="earth" size={16} color="#fff" />
-                  </View>
-                  <View>
-                    <Text
-                      style={[styles.optionTitle, { color: theme.colors.text }]}
-                    >
-                      Share to Feed
-                    </Text>
-                    <Text style={styles.optionSubtitle}>
-                      Post to your profile and goal
-                    </Text>
-                  </View>
-                </View>
-                {postToFeed && (
-                  <Ionicons name="checkmark-circle" size={22} color="#0E96FF" />
-                )}
-              </TouchableOpacity>
-
-              <View style={styles.optionDivider} />
-
-              <TouchableOpacity
-                style={[
-                  styles.optionItem,
-                  !postToFeed && styles.selectedOption,
-                ]}
-                onPress={() => selectShareOption(false)}
-              >
-                <View style={styles.optionContent}>
-                  <View
-                    style={[styles.optionIcon, { backgroundColor: goalColor }]}
-                  >
-                    <Ionicons name="lock-closed" size={16} color="#fff" />
-                  </View>
-                  <View>
-                    <Text
-                      style={[styles.optionTitle, { color: theme.colors.text }]}
-                    >
-                      Log Only
-                    </Text>
-                    <Text style={styles.optionSubtitle}>
-                      Only visible in your goal
-                    </Text>
-                  </View>
-                </View>
-                {!postToFeed && (
-                  <Ionicons name="checkmark-circle" size={22} color="#0E96FF" />
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
-
-        {/* Music picker modal */}
-        <Modal
-          visible={showMusicPicker}
-          animationType="slide"
-          transparent={true}
-          onRequestClose={() => {
-            setShowMusicPicker(false);
-            // Make sure to stop any playing audio when closing the modal
-            if (previewingTrack && isPlaying) {
-              audioPlayer.pause();
-              setPreviewingTrack(null);
-            }
-          }}
-        >
-          <View style={styles.musicPickerModalContainer}>
-            <View style={styles.musicPickerContent}>
-              <View style={styles.musicPickerHeader}>
-                <Text style={styles.musicPickerTitle}>Choose Music</Text>
-                <TouchableOpacity
-                  onPress={() => {
-                    setShowMusicPicker(false);
-                    // Make sure to stop any playing audio when closing the modal
-                    if (previewingTrack && isPlaying) {
-                      audioPlayer.pause();
-                      setPreviewingTrack(null);
-                    }
-                  }}
-                  style={styles.musicPickerCloseButton}
-                >
-                  <Ionicons name="close" size={24} color="#fff" />
-                </TouchableOpacity>
-              </View>
-
-              {/* Search bar */}
-              <View style={styles.searchBarContainer}>
-                <Ionicons
-                  name="search"
-                  size={18}
-                  color="#888"
-                  style={styles.searchIcon}
-                />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Search music..."
-                  placeholderTextColor="#888"
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                />
-                {searchQuery.length > 0 && (
-                  <TouchableOpacity
-                    onPress={() => setSearchQuery("")}
-                    style={styles.clearSearchButton}
-                  >
-                    <Ionicons name="close-circle" size={18} color="#888" />
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {/* Music list */}
-              <FlatList
-                data={filteredMusicTracks}
-                keyExtractor={(item) => item}
-                renderItem={({ item }) => (
-                  <TouchableOpacity
-                    style={[
-                      styles.musicTrackItem,
-                      selectedMusic === item && styles.selectedMusicTrackItem,
-                    ]}
-                    onPress={() => selectMusicTrack(item)}
-                  >
-                    <View style={styles.musicTrackIconContainer}>
-                      <Ionicons
-                        name="musical-note"
-                        size={20}
-                        color={selectedMusic === item ? "#0E96FF" : "#888"}
-                      />
-                    </View>
-                    <Text
-                      style={[
-                        styles.musicTrackName,
-                        selectedMusic === item && styles.selectedMusicTrackName,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {formatTrackName(item)}
-                    </Text>
-                    <View style={styles.musicTrackActions}>
-                      {/* Preview button */}
-                      <TouchableOpacity
-                        style={styles.previewButton}
-                        onPress={(e) => {
-                          e.stopPropagation();
-                          togglePreviewTrack(item);
-                        }}
-                      >
-                        <Ionicons
-                          name={
-                            previewingTrack === item && isPlaying
-                              ? "pause-circle"
-                              : "play-circle"
-                          }
-                          size={28}
-                          color={previewingTrack === item ? "#0E96FF" : "#888"}
-                        />
-                      </TouchableOpacity>
-
-                      {/* Selection indicator */}
-                      {selectedMusic === item && (
-                        <Ionicons
-                          name="checkmark-circle"
-                          size={20}
-                          color="#0E96FF"
-                        />
-                      )}
-                    </View>
-                  </TouchableOpacity>
-                )}
-                showsVerticalScrollIndicator={true}
-                contentContainerStyle={styles.musicTracksList}
-              />
-            </View>
-          </View>
-        </Modal>
+        {/* Share Options Popup */}
+        <ShareOptionsPopup
+          visible={showShareOptions}
+          onClose={toggleShareOptions}
+          postToFeed={postToFeed}
+          onSelectOption={selectShareOption}
+          goalColor={goalColor}
+          theme={theme}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -1007,7 +712,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   imageContainer: {
-    borderRadius: 12,
+    borderRadius: 20,
     overflow: "hidden",
     borderWidth: 1,
     borderColor: "rgba(0,0,0,0.1)",
@@ -1050,241 +755,5 @@ const styles = StyleSheet.create({
   },
   dropdownIcon: {
     marginLeft: 4,
-  },
-  // Dropdown modal styles
-  modalOverlay: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 100,
-  },
-  modalBackground: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0,0,0,0.3)",
-  },
-  optionsDropdown: {
-    position: "absolute",
-    top: 120,
-    right: 16,
-    width: 250,
-    borderRadius: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
-    overflow: "hidden",
-  },
-  optionItem: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 14,
-  },
-  selectedOption: {
-    backgroundColor: "rgba(14, 150, 255, 0.06)",
-  },
-  optionContent: {
-    flexDirection: "row",
-    alignItems: "center",
-    flex: 1,
-  },
-  optionIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 12,
-  },
-  optionTitle: {
-    fontWeight: "600",
-    fontSize: 14,
-  },
-  optionSubtitle: {
-    fontSize: 12,
-    color: "#888",
-    marginTop: 2,
-  },
-  optionDivider: {
-    height: 1,
-    backgroundColor: "rgba(0,0,0,0.05)",
-    marginHorizontal: 12,
-  },
-  // Music section styles
-  musicSectionContainer: {
-    marginBottom: 16,
-  },
-  addMusicButton: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(14, 150, 255, 0.1)",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    alignSelf: "flex-start",
-  },
-  addMusicText: {
-    color: "#0E96FF",
-    marginLeft: 6,
-    fontWeight: "500",
-  },
-  selectedMusicContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "rgba(14, 150, 255, 0.08)",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    alignSelf: "flex-start",
-    maxWidth: "100%",
-  },
-  selectedMusicText: {
-    color: "#0E96FF",
-    marginLeft: 6,
-    marginRight: 8,
-    fontWeight: "500",
-    flex: 1,
-  },
-  clearMusicButton: {
-    padding: 2,
-  },
-  musicIconOverlay: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    backgroundColor: "rgba(0,0,0,0.6)",
-    width: 120,
-    height: 40,
-    borderRadius: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    zIndex: 10,
-  },
-  musicPlayButtonOverlay: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    justifyContent: "center",
-    alignItems: "center",
-    marginRight: 8,
-  },
-  musicIconBackground: {
-    width: "100%",
-    height: "100%",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  musicTextOverlay: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-  musicOverlayText: {
-    color: "#fff",
-    fontSize: 12,
-    fontWeight: "500",
-    marginLeft: 4,
-    flex: 1,
-  },
-  // Music picker modal styles
-  musicPickerModalContainer: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.5)",
-    justifyContent: "flex-end",
-  },
-  musicPickerContent: {
-    backgroundColor: "#181818",
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    height: "70%",
-    paddingBottom: 30,
-  },
-  musicPickerHeader: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.1)",
-    position: "relative",
-  },
-  musicPickerTitle: {
-    color: "white",
-    fontSize: 18,
-    fontWeight: "600",
-  },
-  musicPickerCloseButton: {
-    position: "absolute",
-    right: 16,
-    padding: 4,
-  },
-  searchBarContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#2C2C2C",
-    margin: 16,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    color: "white",
-    paddingVertical: 10,
-    fontSize: 15,
-  },
-  clearSearchButton: {
-    padding: 6,
-  },
-  musicTracksList: {
-    paddingHorizontal: 16,
-    paddingBottom: 20,
-  },
-  musicTrackItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.05)",
-  },
-  selectedMusicTrackItem: {
-    backgroundColor: "rgba(14, 150, 255, 0.08)",
-  },
-  musicTrackIconContainer: {
-    width: 30,
-    alignItems: "center",
-  },
-  musicTrackName: {
-    color: "#CCCCCC",
-    marginLeft: 12,
-    fontSize: 15,
-    flex: 1,
-  },
-  selectedMusicTrackName: {
-    color: "#FFFFFF",
-    fontWeight: "500",
-  },
-  musicTrackActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginLeft: 8,
-    minWidth: 60,
-    justifyContent: "flex-end",
-  },
-  previewButton: {
-    padding: 4,
-    marginRight: 8,
   },
 });

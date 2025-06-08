@@ -18,9 +18,9 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import YallaLogo from "../../assets/images/Yalla.svg";
+import YallaLogo from "../../../assets/images/Yalla.svg";
 import PostItem from "../../components/social/PostItem";
-import { NAVBAR_HEIGHT } from "../../constants/socialData";
+import { NAVBAR_HEIGHT } from "../../constants/layoutConstants";
 import { DarkTheme, DefaultTheme } from "../../constants/theme";
 import { useColorScheme } from "../../hooks/useColorScheme";
 // Import the tab press context hook
