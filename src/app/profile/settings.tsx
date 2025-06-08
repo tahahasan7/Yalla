@@ -120,13 +120,13 @@ export default function Settings() {
         Alert.alert("Error", error.message);
         return;
       }
+      // Navigate directly without showing intermediate UI states
       router.replace("/");
     } catch (error) {
       console.error("Logout error:", error);
       Alert.alert("Error", "Failed to log out. Please try again.");
-    } finally {
-      setIsLoggingOut(false);
     }
+    // Removed the finally block to keep isLoggingOut true until navigation completes
   };
 
   const confirmLogout = () => {
@@ -211,26 +211,10 @@ export default function Settings() {
     );
   }
 
-  // Redirect to home if no user
-  if (!user) {
-    return (
-      <View
-        style={[
-          styles.loadingContainer,
-          { backgroundColor: theme.colors.background },
-        ]}
-      >
-        <Text style={[styles.loadingText, { color: theme.colors.text }]}>
-          Please log in to access settings
-        </Text>
-        <TouchableOpacity
-          style={styles.loginButton}
-          onPress={() => router.push("/")}
-        >
-          <Text style={styles.loginButtonText}>Log In</Text>
-        </TouchableOpacity>
-      </View>
-    );
+  // Redirect to home if no user and not in the process of logging out
+  if (!user && !isLoggingOut) {
+    router.replace("/");
+    return null;
   }
 
   return (
