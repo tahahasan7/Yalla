@@ -463,7 +463,7 @@ const PostItem = ({
                       ? "pause-circle"
                       : "play-circle"
                   }
-                  color="#1DB954"
+                  color="white"
                   size={28}
                 />
               </TouchableOpacity>
@@ -483,7 +483,7 @@ const PostItem = ({
                         },
                       ]}
                     >
-                      <Ionicons name="musical-notes" color="white" size={14} />
+                      <Ionicons name="musical-notes" color="white" size={16} />
                     </Animated.View>
                     {isPlaying && (
                       <View style={styles.playingIndicator}>
@@ -684,7 +684,7 @@ const styles = StyleSheet.create({
     width: 20,
     height: 20,
     borderRadius: 20,
-    backgroundColor: "#1DB954", // Spotify green
+    // backgroundColor: "#0E96FF",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -692,7 +692,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: -3,
     right: -3,
-    backgroundColor: "#1DB954", // Spotify green
+    backgroundColor: "white",
     borderRadius: 8,
     width: 12,
     height: 12,
@@ -759,13 +759,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     marginTop: 10,
-    shadowColor: "#1DB954", // Spotify green for the shadow
-    shadowOffset: {
-      width: 0,
-      height: 0,
-    },
-    shadowOpacity: 0.5,
-    shadowRadius: 10,
   },
   menuIconContainer: {
     flexDirection: "row",
