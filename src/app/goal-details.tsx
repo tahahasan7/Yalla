@@ -490,6 +490,7 @@ export default function GoalDetailsScreen() {
         isGroupGoal={isGroupGoal}
         usersCache={usersForGoal}
         isUserDataLoaded={isUserDataLoaded}
+        goalColor={goal.color}
       />
     );
   };

@@ -1,3 +1,4 @@
+import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import {
   DarkTheme,
   DefaultTheme,
@@ -6,7 +7,8 @@ import {
 import { NativeStackNavigationOptions } from "@react-navigation/native-stack";
 import { Stack } from "expo-router";
 import { useEffect } from "react";
-import { StatusBar, Text, View } from "react-native";
+import { StatusBar, StyleSheet, Text, View } from "react-native";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useColorScheme } from "../hooks/useColorScheme";
 import { useFonts } from "../hooks/useFonts";
 import { verifyOAuthConfiguration } from "../lib/supabase";
@@ -48,146 +50,156 @@ export default function RootLayout() {
   }
 
   return (
-    <ThemeProvider value={theme}>
-      <StatusBar
-        barStyle="light-content"
-        backgroundColor="transparent"
-        translucent={true}
-        hidden={false}
-      />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          animation: "slide_from_right",
-          gestureEnabled: true,
-          gestureDirection: "horizontal",
-        }}
-      >
-        {/* Authentication screens */}
-        <Stack.Screen
-          name="welcome"
-          options={{
-            headerShown: false,
-            animation: "fade",
-            gestureEnabled: false,
-          }}
-        />
-
-        {/* Main tab navigation */}
-        <Stack.Screen
-          name="(tabs)"
-          options={{
-            headerShown: false,
-            animation: "none", // No animation for tab transitions
-          }}
-        />
-
-        {/* Modal group - special modal presentation */}
-        <Stack.Screen
-          name="(modals)"
-          options={{
-            headerShown: false,
-            // This ensures modal presentation
-            presentation: "transparentModal",
-          }}
-        />
-
-        {/* Goal details screen with dynamic animation */}
-        <Stack.Screen
-          name="goal-details"
-          options={({ route }) => {
-            // Type cast the params
-            const params = route.params as RouteParams | undefined;
-            const animation = params?.animation || "slide_from_right";
-
-            return {
+    <GestureHandlerRootView style={styles.container}>
+      <BottomSheetModalProvider>
+        <ThemeProvider value={theme}>
+          <StatusBar
+            barStyle="light-content"
+            backgroundColor="transparent"
+            translucent={true}
+            hidden={false}
+          />
+          <Stack
+            screenOptions={{
               headerShown: false,
-              presentation: "card",
-              animation,
+              animation: "slide_from_right",
               gestureEnabled: true,
               gestureDirection: "horizontal",
-            } as NativeStackNavigationOptions;
-          }}
-        />
+            }}
+          >
+            {/* Authentication screens */}
+            <Stack.Screen
+              name="welcome"
+              options={{
+                headerShown: false,
+                animation: "fade",
+                gestureEnabled: false,
+              }}
+            />
 
-        {/* Camera from goal-details with dynamic animation */}
-        <Stack.Screen
-          name="goal-camera"
-          options={({ route }) => {
-            // Type cast the params
-            const params = route.params as RouteParams | undefined;
-            const animation = params?.animation || "slide_from_right";
+            {/* Main tab navigation */}
+            <Stack.Screen
+              name="(tabs)"
+              options={{
+                headerShown: false,
+                animation: "none", // No animation for tab transitions
+              }}
+            />
 
-            return {
-              headerShown: false,
-              presentation: "card",
-              animation,
-              gestureEnabled: true,
-              gestureDirection: "horizontal",
-            } as NativeStackNavigationOptions;
-          }}
-        />
+            {/* Modal group - special modal presentation */}
+            <Stack.Screen
+              name="(modals)"
+              options={{
+                headerShown: false,
+                // This ensures modal presentation
+                presentation: "transparentModal",
+              }}
+            />
 
-        {/* Post sharing screen */}
-        <Stack.Screen
-          name="post-sharing"
-          options={{
-            headerShown: false,
-            presentation: "card",
-            animation: "slide_from_right",
-            gestureEnabled: false,
-            gestureDirection: "horizontal",
-          }}
-        />
+            {/* Goal details screen with dynamic animation */}
+            <Stack.Screen
+              name="goal-details"
+              options={({ route }) => {
+                // Type cast the params
+                const params = route.params as RouteParams | undefined;
+                const animation = params?.animation || "slide_from_right";
 
-        {/* Settings screen - horizontal slide in */}
-        <Stack.Screen
-          name="profile/settings"
-          options={{
-            headerShown: false,
-            presentation: "card",
-            animation: "slide_from_right",
-            gestureEnabled: true,
-            gestureDirection: "horizontal",
-          }}
-        />
+                return {
+                  headerShown: false,
+                  presentation: "card",
+                  animation,
+                  gestureEnabled: true,
+                  gestureDirection: "horizontal",
+                } as NativeStackNavigationOptions;
+              }}
+            />
 
-        {/* Non-modal Profile Page - horizontal slide in */}
-        <Stack.Screen
-          name="profile/profile-page"
-          options={{
-            headerShown: false,
-            presentation: "card",
-            animation: "slide_from_right",
-            gestureEnabled: true,
-            gestureDirection: "horizontal",
-          }}
-        />
+            {/* Camera from goal-details with dynamic animation */}
+            <Stack.Screen
+              name="goal-camera"
+              options={({ route }) => {
+                // Type cast the params
+                const params = route.params as RouteParams | undefined;
+                const animation = params?.animation || "slide_from_right";
 
-        {/* About screen - horizontal slide in */}
-        <Stack.Screen
-          name="profile/about"
-          options={{
-            headerShown: false,
-            presentation: "card",
-            animation: "slide_from_right",
-            gestureEnabled: true,
-            gestureDirection: "horizontal",
-          }}
-        />
+                return {
+                  headerShown: false,
+                  presentation: "card",
+                  animation,
+                  gestureEnabled: true,
+                  gestureDirection: "horizontal",
+                } as NativeStackNavigationOptions;
+              }}
+            />
 
-        {/* Edit Profile screen - horizontal slide in */}
-        <Stack.Screen
-          name="profile/edit-profile"
-          options={{
-            headerShown: false,
-            presentation: "card",
-            animation: "slide_from_right",
-            gestureEnabled: true,
-            gestureDirection: "horizontal",
-          }}
-        />
-      </Stack>
-    </ThemeProvider>
+            {/* Post sharing screen */}
+            <Stack.Screen
+              name="post-sharing"
+              options={{
+                headerShown: false,
+                presentation: "card",
+                animation: "slide_from_right",
+                gestureEnabled: false,
+                gestureDirection: "horizontal",
+              }}
+            />
+
+            {/* Settings screen - horizontal slide in */}
+            <Stack.Screen
+              name="profile/settings"
+              options={{
+                headerShown: false,
+                presentation: "card",
+                animation: "slide_from_right",
+                gestureEnabled: true,
+                gestureDirection: "horizontal",
+              }}
+            />
+
+            {/* Non-modal Profile Page - horizontal slide in */}
+            <Stack.Screen
+              name="profile/profile-page"
+              options={{
+                headerShown: false,
+                presentation: "card",
+                animation: "slide_from_right",
+                gestureEnabled: true,
+                gestureDirection: "horizontal",
+              }}
+            />
+
+            {/* About screen - horizontal slide in */}
+            <Stack.Screen
+              name="profile/about"
+              options={{
+                headerShown: false,
+                presentation: "card",
+                animation: "slide_from_right",
+                gestureEnabled: true,
+                gestureDirection: "horizontal",
+              }}
+            />
+
+            {/* Edit Profile screen - horizontal slide in */}
+            <Stack.Screen
+              name="profile/edit-profile"
+              options={{
+                headerShown: false,
+                presentation: "card",
+                animation: "slide_from_right",
+                gestureEnabled: true,
+                gestureDirection: "horizontal",
+              }}
+            />
+          </Stack>
+        </ThemeProvider>
+      </BottomSheetModalProvider>
+    </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+});

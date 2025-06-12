@@ -17,11 +17,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 const customStorageAdapter = {
   getItem: async (key: string) => {
     try {
-      // Check if we're in a browser environment
-      if (typeof window !== "undefined") {
-        return await AsyncStorage.getItem(key);
-      }
-      return null;
+      return await AsyncStorage.getItem(key);
     } catch (error) {
       console.error("Error in getItem:", error);
       return null;
@@ -29,18 +25,14 @@ const customStorageAdapter = {
   },
   setItem: async (key: string, value: string) => {
     try {
-      if (typeof window !== "undefined") {
-        return await AsyncStorage.setItem(key, value);
-      }
+      return await AsyncStorage.setItem(key, value);
     } catch (error) {
       console.error("Error in setItem:", error);
     }
   },
   removeItem: async (key: string) => {
     try {
-      if (typeof window !== "undefined") {
-        return await AsyncStorage.removeItem(key);
-      }
+      return await AsyncStorage.removeItem(key);
     } catch (error) {
       console.error("Error in removeItem:", error);
     }

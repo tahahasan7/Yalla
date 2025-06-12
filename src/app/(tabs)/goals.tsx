@@ -6,6 +6,7 @@ import { MotiView } from "moti";
 import React, { useEffect, useRef, useState } from "react";
 import {
   FlatList,
+  Platform,
   StatusBar,
   StyleSheet,
   Text,
@@ -14,8 +15,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { ProfileAvatar } from "../../components/common";
-import GoalBottomSheet from "../../components/goals/bottomSheets/GoalBottomSheet";
-import QuoteBottomSheet from "../../components/goals/bottomSheets/QuoteBottomSheet";
 import GoalCard from "../../components/goals/GoalCard";
 import GoalCardSkeleton from "../../components/goals/skeletonLoader/GoalCardSkeleton";
 import { FontFamily } from "../../constants/fonts";
@@ -24,6 +23,21 @@ import { useAuth } from "../../hooks/useAuth";
 import { useColorScheme } from "../../hooks/useColorScheme";
 import { supabase } from "../../lib/supabase";
 import { goalService, GoalWithDetails } from "../../services/goalService";
+
+// Import bottom sheets based on platform
+const GoalBottomSheetComponent =
+  Platform.OS === "android"
+    ? require("../../components/goals/bottomSheets/android/GoalBottomSheet")
+        .default
+    : require("../../components/goals/bottomSheets/ios/GoalBottomSheet")
+        .default;
+
+const QuoteBottomSheetComponent =
+  Platform.OS === "android"
+    ? require("../../components/goals/bottomSheets/android/QuoteBottomSheet")
+        .default
+    : require("../../components/goals/bottomSheets/ios/QuoteBottomSheet")
+        .default;
 
 // Tab options for goals screen
 const TABS = [
@@ -513,9 +527,9 @@ export default function GoalsScreen() {
         {renderContent()}
       </View>
 
-      {/* Goal Bottom Sheet */}
+      {/* Platform-specific Bottom Sheets */}
       {selectedGoal && (
-        <GoalBottomSheet
+        <GoalBottomSheetComponent
           visible={bottomSheetVisible}
           onClose={closeBottomSheet}
           goal={selectedGoal as any}
@@ -523,8 +537,7 @@ export default function GoalsScreen() {
         />
       )}
 
-      {/* Quote Bottom Sheet */}
-      <QuoteBottomSheet
+      <QuoteBottomSheetComponent
         visible={quoteBottomSheetVisible}
         onClose={closeQuoteBottomSheet}
       />

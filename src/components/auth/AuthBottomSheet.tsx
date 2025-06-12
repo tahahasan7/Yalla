@@ -213,14 +213,23 @@ const AuthBottomSheet = ({
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) {
         Alert.alert("Error", error.message);
-      } else {
+      } else if (data.session) {
+        // Explicitly store the session in AsyncStorage to ensure persistence
+        await supabase.auth.setSession({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        });
+
+        // Enable auto-refresh for the session
+        supabase.auth.startAutoRefresh();
+
         onSuccess();
       }
     } catch (error) {
@@ -246,14 +255,27 @@ const AuthBottomSheet = ({
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
       });
 
       if (error) {
         Alert.alert("Error", error.message);
+      } else if (data.session) {
+        // If email confirmation is not required, the session will be available immediately
+        // Explicitly store the session in AsyncStorage to ensure persistence
+        await supabase.auth.setSession({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        });
+
+        // Enable auto-refresh for the session
+        supabase.auth.startAutoRefresh();
+
+        onSuccess();
       } else {
+        // For cases where email confirmation is required
         Alert.alert(
           "Registration Successful",
           "Please check your email for verification.",

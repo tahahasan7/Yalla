@@ -35,6 +35,39 @@ export default function WelcomeScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [appleAuthAvailable, setAppleAuthAvailable] = useState(false);
 
+  // Check for existing session on mount
+  useEffect(() => {
+    const checkSession = async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (data.session) {
+          console.log("Existing session found, navigating to home");
+          router.replace("/");
+        }
+      } catch (error) {
+        console.error("Error checking session:", error);
+      }
+    };
+
+    checkSession();
+
+    // Set up auth state change listener
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        console.log("Auth state changed in welcome screen:", event);
+        if (session) {
+          console.log("Session detected in listener, navigating to home");
+          router.replace("/");
+        }
+      }
+    );
+
+    // Clean up listener on unmount
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, [router]);
+
   // Check if Apple Authentication is available
   useEffect(() => {
     const checkAppleAuthAvailability = async () => {

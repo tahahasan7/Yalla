@@ -1,4 +1,4 @@
-import { COLOR_OPTIONS, getColorName } from "@/constants/colors";
+import { CATEGORIES } from "@/constants/categories";
 import { FontFamily } from "@/constants/fonts";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useRef, useState } from "react";
@@ -8,44 +8,43 @@ import {
   Easing,
   Modal,
   PanResponder,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import Icon from "../../common/Icon";
+import Icon from "../../../common/Icon";
 
 const { height } = Dimensions.get("window");
 
 const DRAG_THRESHOLD = 120; // Distance user needs to drag to dismiss
-const COLORS = COLOR_OPTIONS.map((option) => option.color);
 
-interface ColorBottomSheetProps {
+interface CategoryBottomSheetProps {
   visible: boolean;
   onClose: () => void;
-  selectedColor: string;
-  onColorSelect: (color: string) => void;
+  selectedCategory: string;
+  onCategorySelect: (category: string) => void;
 }
 
-const ColorBottomSheet = (props: ColorBottomSheetProps) => {
+const CategoryBottomSheet = (props: CategoryBottomSheetProps) => {
   // Animation values
   const modalBackgroundOpacity = useRef(new Animated.Value(0)).current;
   const modalAnimation = useRef(new Animated.Value(height)).current;
   const dragY = useRef(new Animated.Value(0)).current;
 
-  // State to track temporary color selection (not yet saved)
-  const [tempSelectedColor, setTempSelectedColor] = useState<string | null>(
-    props.selectedColor || null
+  // State to track temporary category selection (not yet saved)
+  const [tempSelectedCategory, setTempSelectedCategory] = useState(
+    props.selectedCategory
   );
 
-  // Update tempSelectedColor when the sheet becomes visible
+  // Update tempSelectedCategory when the sheet becomes visible
   useEffect(() => {
     if (props.visible) {
-      // Only set the temp color if there's a selected color
-      setTempSelectedColor(props.selectedColor || null);
+      setTempSelectedCategory(props.selectedCategory);
     }
-  }, [props.visible, props.selectedColor]);
+  }, [props.visible, props.selectedCategory]);
 
   // Setup pan responder for drag gestures
   const panResponder = useRef(
@@ -96,7 +95,7 @@ const ColorBottomSheet = (props: ColorBottomSheetProps) => {
     }
   }, [props.visible]);
 
-  // Close the modal WITHOUT saving the color
+  // Close the modal WITHOUT saving the category
   const closeWithoutSaving = () => {
     // Animations to hide the modal
     Animated.timing(modalBackgroundOpacity, {
@@ -118,28 +117,19 @@ const ColorBottomSheet = (props: ColorBottomSheetProps) => {
     });
   };
 
-  // Select a color temporarily (just visual selection, not saving)
-  const selectColor = (color: string) => {
-    // CHANGED: Now only updates the temporary state without closing the bottom sheet
-    setTempSelectedColor(color);
+  // Select a category temporarily (just visual selection, not saving)
+  const selectCategory = (category: string) => {
+    setTempSelectedCategory(category);
   };
 
-  // Save the selected color and close the modal
+  // Save the selected category and close the modal
   const saveAndClose = () => {
-    if (tempSelectedColor) {
-      props.onColorSelect(tempSelectedColor);
-    }
+    props.onCategorySelect(tempSelectedCategory);
     closeWithoutSaving();
   };
 
   // Combine modal animation and drag for final transform
   const combinedTransform = Animated.add(modalAnimation, dragY);
-
-  // Get the color name to display
-  const getSelectedColorName = () => {
-    if (!tempSelectedColor) return "";
-    return getColorName(tempSelectedColor);
-  };
 
   return (
     <Modal
@@ -181,67 +171,63 @@ const ColorBottomSheet = (props: ColorBottomSheetProps) => {
 
           {/* Main content container */}
           <View style={styles.contentWrapper}>
-            {/* Color Picker Header */}
-            <View style={styles.colorHeader}>
+            {/* Category Picker Header */}
+            <View style={styles.categoryHeader}>
               <Icon
-                name="Brush"
+                name="GridStroke"
                 size={24}
                 color="#fff"
-                style={styles.colorIcon}
+                style={styles.categoryIcon}
               />
-              <Text style={styles.colorTitle}>Color</Text>
+              <Text style={styles.categoryTitle}>Category</Text>
             </View>
 
             {/* Description text */}
-            <Text style={styles.colorDescription}>
-              This color will be set to your goal card.
+            <Text style={styles.categoryDescription}>
+              This category will be set to your goal card.
             </Text>
 
-            {/* Show selected color name if a color is selected */}
-            {tempSelectedColor && (
-              <View style={styles.selectedColorNameContainer}>
-                <View
-                  style={[
-                    styles.selectedColorPreview,
-                    { backgroundColor: tempSelectedColor },
-                  ]}
-                />
-                <Text style={styles.selectedColorName}>
-                  {getSelectedColorName()}
-                </Text>
-              </View>
-            )}
-
-            {/* Color grid */}
-            <View style={styles.colorGrid}>
-              {COLORS.map((color, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={[
-                    styles.colorCircle,
-                    { backgroundColor: color },
-                    tempSelectedColor === color && styles.selectedColorCircle,
-                  ]}
-                  onPress={() => selectColor(color)}
-                >
-                  {tempSelectedColor === color && (
-                    <View style={styles.selectedIndicator}>
-                      <Ionicons name="checkmark" size={18} color="#fff" />
+            {/* Category list - now wrapped in ScrollView */}
+            <ScrollView
+              style={styles.categoryScrollView}
+              showsVerticalScrollIndicator={false}
+              bounces={false}
+            >
+              <View style={styles.categoryList}>
+                {CATEGORIES.map((category, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.categoryItem,
+                      tempSelectedCategory === category.name &&
+                        styles.selectedCategoryItem,
+                    ]}
+                    onPress={() => selectCategory(category.name)}
+                  >
+                    <View style={styles.categoryIconContainer}>
+                      {category.icon === "ionicons" ? (
+                        <Ionicons
+                          name={category.ionIcon as any}
+                          size={22}
+                          color="#fff"
+                        />
+                      ) : (
+                        <Icon name={category.icon} size={22} color="#fff" />
+                      )}
                     </View>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
+                    <Text style={styles.categoryItemText}>{category.name}</Text>
+                    {tempSelectedCategory === category.name && (
+                      <View style={styles.selectedIndicator}>
+                        <Ionicons name="checkmark" size={18} color="#fff" />
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </ScrollView>
 
             {/* Save button */}
-            <TouchableOpacity
-              style={[
-                styles.saveButton,
-                !tempSelectedColor && styles.saveButtonDisabled,
-              ]}
-              onPress={saveAndClose}
-              disabled={!tempSelectedColor}
-            >
+            <TouchableOpacity style={styles.saveButton} onPress={saveAndClose}>
               <Text style={styles.saveButtonText}>Save</Text>
             </TouchableOpacity>
           </View>
@@ -269,6 +255,7 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     margin: 10,
     paddingBottom: 36,
+    maxHeight: "80%", // Limit the height to 80% of the screen
     // Add shadow
     shadowColor: "#000",
     shadowOffset: {
@@ -307,79 +294,62 @@ const styles = StyleSheet.create({
     zIndex: 10,
     elevation: 5, // Android elevation
   },
-  colorHeader: {
+  categoryHeader: {
     flexDirection: "row",
     alignItems: "center",
     marginTop: 10,
     marginBottom: 8,
   },
-  colorIcon: {
+  categoryIcon: {
     marginRight: 10,
   },
-  colorTitle: {
+  categoryTitle: {
     fontFamily: FontFamily.SemiBold,
     fontSize: 20,
     color: "#FFFFFF",
   },
-  colorDescription: {
+  categoryDescription: {
     fontFamily: FontFamily.Regular,
     fontSize: 14,
     color: "#BBBBBB",
     marginBottom: 16,
   },
-  selectedColorNameContainer: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#2A2A2A",
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 16,
-  },
-  selectedColorPreview: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    marginRight: 10,
-  },
-  selectedColorName: {
-    fontFamily: FontFamily.Medium,
-    fontSize: 16,
-    color: "#FFFFFF",
-  },
-  divider: {
-    height: 1,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
-    marginBottom: 16,
-  },
-  chooseText: {
-    fontFamily: FontFamily.Medium,
-    fontSize: 16,
-    color: "#FFFFFF",
-    marginBottom: 12,
-  },
-  colorGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
+  categoryList: {
     marginBottom: 20,
   },
-  colorCircle: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    margin: 6,
+  categoryItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#222",
+    borderRadius: 15,
+    padding: 12,
+    marginBottom: 10,
+  },
+  selectedCategoryItem: {
+    backgroundColor: "#333",
+    borderWidth: 1,
+    borderColor: "#0E96FF",
+  },
+  categoryIconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#444",
     justifyContent: "center",
     alignItems: "center",
+    marginRight: 12,
   },
-  selectedColorCircle: {
-    borderWidth: 2,
-    borderColor: "#FFFFFF",
+  categoryItemText: {
+    fontFamily: FontFamily.Medium,
+    fontSize: 16,
+    color: "#FFFFFF",
+    flex: 1,
   },
   selectedIndicator: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: "rgba(0, 0, 0, 0.3)",
+    backgroundColor: "#0E96FF",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -390,14 +360,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 10,
   },
-  saveButtonDisabled: {
-    backgroundColor: "#444444",
-  },
   saveButtonText: {
     fontFamily: FontFamily.SemiBold,
     fontSize: 16,
     color: "#000000",
   },
+  categoryScrollView: {
+    maxHeight: 300, // Set a fixed height for the scrollable area
+  },
 });
 
-export default ColorBottomSheet;
+export default CategoryBottomSheet;

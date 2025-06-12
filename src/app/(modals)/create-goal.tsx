@@ -29,9 +29,15 @@ import {
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import CategoryBottomSheet from "../../components/create-goal/bottomSheets/CategoryBottomSheet";
+// Platform-specific imports
+import CategoryBottomSheet from "../../components/create-goal/bottomSheets/android/CategoryBottomSheet";
+import ColorBottomSheet from "../../components/create-goal/bottomSheets/android/ColorBottomSheet";
+
+// iOS specific imports
+import CategoryBottomSheetIOS from "../../components/create-goal/bottomSheets/ios/CategoryBottomSheet";
+import ColorBottomSheetIOS from "../../components/create-goal/bottomSheets/ios/ColorBottomSheet";
+
 import CategoryColorSection from "../../components/create-goal/bottomSheets/CategoryColorSection";
-import ColorBottomSheet from "../../components/create-goal/bottomSheets/ColorBottomSheet";
 import EndingDateSection from "../../components/create-goal/EndingDateSection";
 import FrequencySection from "../../components/create-goal/FrequencySection";
 import FriendsSection from "../../components/create-goal/FriendsSection";
@@ -552,21 +558,42 @@ export default function CreateGoalScreen() {
         </View>
       </BottomSheet>
 
-      {/* Color Picker Bottom Sheet */}
-      <ColorBottomSheet
-        visible={showColorPicker}
-        onClose={() => setShowColorPicker(false)}
-        selectedColor={color}
-        onColorSelect={handleColorSelect}
-      />
+      {/* Platform-specific Bottom Sheets */}
+      {Platform.OS === "android" ? (
+        <>
+          {/* Android Bottom Sheets */}
+          <ColorBottomSheet
+            visible={showColorPicker}
+            onClose={() => setShowColorPicker(false)}
+            selectedColor={color}
+            onColorSelect={handleColorSelect}
+          />
 
-      {/* Category Picker Bottom Sheet */}
-      <CategoryBottomSheet
-        visible={showCategoryPicker}
-        onClose={() => setShowCategoryPicker(false)}
-        selectedCategory={category}
-        onCategorySelect={handleCategorySelect}
-      />
+          <CategoryBottomSheet
+            visible={showCategoryPicker}
+            onClose={() => setShowCategoryPicker(false)}
+            selectedCategory={category}
+            onCategorySelect={handleCategorySelect}
+          />
+        </>
+      ) : (
+        <>
+          {/* iOS Bottom Sheets */}
+          <ColorBottomSheetIOS
+            visible={showColorPicker}
+            onClose={() => setShowColorPicker(false)}
+            selectedColor={color}
+            onColorSelect={handleColorSelect}
+          />
+
+          <CategoryBottomSheetIOS
+            visible={showCategoryPicker}
+            onClose={() => setShowCategoryPicker(false)}
+            selectedCategory={category}
+            onCategorySelect={handleCategorySelect}
+          />
+        </>
+      )}
     </GestureHandlerRootView>
   );
 }

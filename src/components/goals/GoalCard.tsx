@@ -93,6 +93,7 @@ const GoalCard: React.FC<GoalCardProps> = ({ goal, onLongPress }) => {
         completed: goal.completed ? "true" : "false",
         completedDate: goal.completed_date,
         category: goal.category?.name,
+        goalType: goal.goal_type || "solo", // Add the goal type parameter
       },
     });
   };

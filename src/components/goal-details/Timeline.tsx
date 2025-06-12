@@ -1,8 +1,15 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { FontFamily } from "../../constants/fonts";
-import { fetchUserProfile, getProfileImage } from "../../hooks/useAuth";
+import { fetchUserProfile, useAuth } from "../../hooks/useAuth";
 import { GoalLogItem } from "../../services/goalService";
 import { ProfileAvatar } from "../common";
 
@@ -13,6 +20,7 @@ interface TimelineProps {
   isGroupGoal?: boolean;
   usersCache?: Record<string, UserData>;
   isUserDataLoaded?: boolean;
+  goalColor?: string;
 }
 
 // User data cache to avoid multiple fetches of the same user
@@ -22,6 +30,17 @@ interface UserData {
   profile_pic_url?: string;
 }
 
+// Prepared timeline item with all necessary data
+interface PreparedTimelineItem extends GoalLogItem {
+  dayNumber: number;
+  hasUserData: boolean;
+  userName: string;
+  isCurrentUserPost: boolean;
+}
+
+// Prepared month data
+type PreparedMonthData = [string, PreparedTimelineItem[]];
+
 const Timeline: React.FC<TimelineProps> = ({
   sortedMonthsWithSortedDays,
   onDayPress,
@@ -29,21 +48,22 @@ const Timeline: React.FC<TimelineProps> = ({
   isGroupGoal = false,
   usersCache = {},
   isUserDataLoaded = false,
+  goalColor = "#1F1F1F",
 }) => {
-  // Keep a cache of user data to avoid fetching the same user multiple times
+  // Component state
+  const [isLoading, setIsLoading] = useState(true);
+  const [preparedData, setPreparedData] = useState<PreparedMonthData[]>([]);
   const [userCache, setUserCache] =
     useState<Record<string, UserData>>(usersCache);
-  const [isLoadingUsers, setIsLoadingUsers] = useState(!isUserDataLoaded);
+  const { user } = useAuth();
 
-  // Use pre-fetched user data if available
-  useEffect(() => {
-    if (Object.keys(usersCache).length > 0) {
-      setUserCache(usersCache);
-      setIsLoadingUsers(false);
-    }
-  }, [usersCache]);
+  // Prepare a placeholder avatar component for when user data is loading
+  const PlaceholderAvatar = useMemo(
+    () => <View style={styles.posterAvatarPlaceholder} />,
+    []
+  );
 
-  // Extract all unique user IDs from logs - moved to useMemo to prevent recalculations
+  // Extract all unique user IDs from logs
   const uniqueUserIds = useMemo(() => {
     const userIds = new Set<string>();
     sortedMonthsWithSortedDays.forEach(([_, items]) => {
@@ -54,157 +74,185 @@ const Timeline: React.FC<TimelineProps> = ({
     return Array.from(userIds);
   }, [sortedMonthsWithSortedDays]);
 
-  // Fetch all user data at once instead of one by one
-  const fetchAllUsers = useCallback(async () => {
-    if (uniqueUserIds.length === 0) {
-      setIsLoadingUsers(false);
-      return;
-    }
+  // Fetch and prepare all data at once
+  useEffect(() => {
+    let isMounted = true;
 
-    setIsLoadingUsers(true);
+    const prepareData = async () => {
+      setIsLoading(true);
 
-    try {
-      // Create a map of existing users to avoid refetching
-      const newCache: Record<string, UserData> = { ...userCache };
-      const usersToFetch = uniqueUserIds.filter((id) => !newCache[id]);
+      // 1. Ensure we have user data if needed
+      let finalUserCache = { ...userCache };
 
-      // If all users are already in cache, we're done
-      if (usersToFetch.length === 0) {
-        setIsLoadingUsers(false);
-        return;
+      // If we have pre-fetched user data, use it
+      if (Object.keys(usersCache).length > 0) {
+        finalUserCache = { ...usersCache };
+      }
+      // Otherwise fetch what we need
+      else if (uniqueUserIds.length > 0 && isGroupGoal) {
+        try {
+          const usersToFetch = uniqueUserIds.filter(
+            (id) => !finalUserCache[id]
+          );
+
+          if (usersToFetch.length > 0) {
+            // Fetch all users in parallel
+            const userPromises = usersToFetch.map(async (userId) => {
+              try {
+                const userData = await fetchUserProfile(userId);
+                if (userData) {
+                  return {
+                    id: userId,
+                    userData: {
+                      id: userId,
+                      name: userData.name,
+                      profile_pic_url: userData.profile_pic_url,
+                    },
+                  };
+                }
+                return {
+                  id: userId,
+                  userData: { id: userId, name: "User" },
+                };
+              } catch (error) {
+                console.error(`Error fetching user ${userId}:`, error);
+                return {
+                  id: userId,
+                  userData: { id: userId, name: "User" },
+                };
+              }
+            });
+
+            const fetchedUsers = await Promise.all(userPromises);
+            fetchedUsers.forEach(({ id, userData }) => {
+              finalUserCache[id] = userData;
+            });
+          }
+        } catch (error) {
+          console.error("Error fetching users:", error);
+        }
       }
 
-      // Fetch all users in parallel for better performance
-      const userPromises = usersToFetch.map(async (userId) => {
-        try {
-          const userData = await fetchUserProfile(userId);
-          if (userData) {
-            return {
-              id: userId,
-              userData: {
-                id: userId,
-                name: userData.name,
-                profile_pic_url: userData.profile_pic_url,
-              },
-            };
-          }
-          // Return a placeholder if fetch failed
-          return {
-            id: userId,
-            userData: { id: userId, name: "User" },
-          };
-        } catch (error) {
-          console.error(`Error fetching user ${userId}:`, error);
-          return {
-            id: userId,
-            userData: { id: userId, name: "User" },
-          };
-        }
-      });
+      // 2. Prepare timeline items with all necessary data
+      const preparedMonths: PreparedMonthData[] =
+        sortedMonthsWithSortedDays.map(([month, items]) => {
+          const preparedItems = items.map((item, index) => {
+            // Calculate day number
+            const dayNumber = index + 1;
 
-      // Wait for all user data to be fetched
-      const fetchedUsers = await Promise.all(userPromises);
-
-      // Update the cache with the new user data
-      fetchedUsers.forEach(({ id, userData }) => {
-        newCache[id] = userData;
-      });
-
-      setUserCache(newCache);
-    } catch (error) {
-      console.error("Error fetching users:", error);
-    } finally {
-      setIsLoadingUsers(false);
-    }
-  }, [uniqueUserIds, userCache]);
-
-  // Fetch user data when component mounts or when user IDs change
-  useEffect(() => {
-    fetchAllUsers();
-  }, [fetchAllUsers]);
-
-  // Helper function to get profile image URL - memoized to prevent recalculations
-  const getProfileImageUrl = useCallback(
-    (userId: string): string | null => {
-      const user = userCache[userId];
-      if (!user) return null;
-
-      // Create a user object that matches the AppUser interface structure
-      const userObj = {
-        id: user.id,
-        profile_pic_url: user.profile_pic_url,
-        name: user.name,
-        // Add required fields from AppUser that getProfileImage might use
-        email: "",
-        app_metadata: {},
-        user_metadata: {},
-        aud: "",
-        created_at: "",
-      };
-
-      return getProfileImage(userObj);
-    },
-    [userCache]
-  );
-
-  // Prepare a placeholder avatar component for when user data is loading
-  const PlaceholderAvatar = useMemo(
-    () => <View style={styles.posterAvatarPlaceholder} />,
-    []
-  );
-
-  return (
-    <View style={styles.timelineContainer}>
-      {sortedMonthsWithSortedDays.map(([month, items]) => (
-        <View key={month} style={styles.monthGroup}>
-          <Text style={styles.monthHeaderText}>{month}</Text>
-          {items.map((item: GoalLogItem, itemIndex: number) => {
-            // Calculate the correct day number based on the total logs
-            // This ensures the newest log is Day 1
-            const dayNumber = itemIndex + 1;
-
-            // Pre-determine if we have user data to avoid conditional rendering delays
-            const hasUserData = item.user_id && userCache[item.user_id];
-            const userName = hasUserData
-              ? userCache[item.user_id].name || "User"
+            // Get user data
+            const userExists = !!(item.user_id && finalUserCache[item.user_id]);
+            const userName = userExists
+              ? finalUserCache[item.user_id].name || "User"
               : "User";
 
-            return (
-              <View key={item.id} style={styles.timelineItem}>
-                {/* Date column */}
-                <View style={styles.dateColumn}>
-                  <View style={styles.dateContainer}>
-                    <View style={styles.dateCircle}>
-                      <Text style={styles.dayText}>{item.day}</Text>
-                    </View>
+            // Check if current user's post
+            const isCurrentUserPost = item.user_id === user?.id;
+
+            // Return prepared item with all data
+            return {
+              ...item,
+              dayNumber,
+              hasUserData: userExists,
+              userName,
+              isCurrentUserPost,
+            };
+          });
+
+          return [month, preparedItems];
+        });
+
+      // Only update state if component is still mounted
+      if (isMounted) {
+        setUserCache(finalUserCache);
+        setPreparedData(preparedMonths);
+        setIsLoading(false);
+      }
+    };
+
+    prepareData();
+
+    // Cleanup function
+    return () => {
+      isMounted = false;
+    };
+  }, [
+    sortedMonthsWithSortedDays,
+    usersCache,
+    uniqueUserIds,
+    isGroupGoal,
+    user?.id,
+  ]);
+
+  // If still loading, show loading indicator
+  if (isLoading) {
+    return (
+      <View style={[styles.timelineContainer, styles.loadingContainer]}>
+        <ActivityIndicator size="large" color="#fff" />
+        <Text style={styles.loadingText}>Loading timeline data...</Text>
+      </View>
+    );
+  }
+
+  // If no data after loading, show empty state
+  if (preparedData.length === 0) {
+    return (
+      <View style={[styles.timelineContainer, styles.loadingContainer]}>
+        <Text style={styles.loadingText}>No timeline data available</Text>
+      </View>
+    );
+  }
+
+  // Render the fully prepared timeline
+  return (
+    <View style={styles.timelineContainer}>
+      {preparedData.map(([month, items]) => (
+        <View key={month} style={styles.monthGroup}>
+          <Text style={styles.monthHeaderText}>{month}</Text>
+          {items.map((item, itemIndex) => (
+            <View key={item.id} style={styles.timelineItem}>
+              {/* Date column */}
+              <View style={styles.dateColumn}>
+                <View style={styles.dateContainer}>
+                  <View style={styles.dateCircle}>
+                    <Text style={styles.dayText}>{item.day}</Text>
                   </View>
-                  {itemIndex < items.length - 1 && (
-                    <View style={styles.verticalLine} />
-                  )}
                 </View>
+                {itemIndex < items.length - 1 && (
+                  <View style={styles.verticalLine} />
+                )}
+              </View>
 
-                {/* Content column */}
-                <View style={styles.contentColumn}>
-                  <Text style={styles.weekText}>
-                    {new Date(item.date).toLocaleDateString("en-US", {
-                      weekday: "long",
-                    })}
-                    {item.created_at && (
-                      <Text style={styles.timeText}>
-                        {" • "}
-                        {new Date(item.created_at).toLocaleTimeString("en-US", {
-                          hour: "numeric",
-                          minute: "numeric",
-                          hour12: true,
-                        })}
-                      </Text>
-                    )}
-                  </Text>
+              {/* Content column */}
+              <View style={styles.contentColumn}>
+                <Text style={styles.weekText}>
+                  {new Date(item.date).toLocaleDateString("en-US", {
+                    weekday: "long",
+                  })}
+                  {item.created_at && (
+                    <Text style={styles.timeText}>
+                      {" • "}
+                      {new Date(item.created_at).toLocaleTimeString("en-US", {
+                        hour: "numeric",
+                        minute: "numeric",
+                        hour12: true,
+                      })}
+                    </Text>
+                  )}
+                </Text>
 
-                  <View style={styles.captionContainer}>
-                    {/* User who posted - now shown for all goals */}
-                    <View style={styles.posterContainer}>
-                      {hasUserData ? (
+                <View style={styles.captionContainer}>
+                  {/* User info section - only for group goals */}
+                  {isGroupGoal && (
+                    <View
+                      style={[
+                        styles.posterContainer,
+                        item.isCurrentUserPost && {
+                          backgroundColor: goalColor,
+                        },
+                      ]}
+                    >
+                      {item.hasUserData && userCache[item.user_id] ? (
                         <ProfileAvatar
                           size={24}
                           user={{
@@ -222,39 +270,44 @@ const Timeline: React.FC<TimelineProps> = ({
                       ) : (
                         PlaceholderAvatar
                       )}
-                      <Text style={styles.posterName}>{userName}</Text>
+                      <Text style={styles.posterName}>{item.userName}</Text>
                     </View>
+                  )}
 
-                    <View style={styles.captionHeader}>
-                      <Text style={styles.goalDayText}>Day {dayNumber}</Text>
-                      <TouchableOpacity style={styles.menuButton}>
-                        <Ionicons
-                          name="ellipsis-horizontal"
-                          size={18}
-                          color="white"
-                        />
-                      </TouchableOpacity>
-                    </View>
-                    <Text style={styles.captionText}>{item.caption}</Text>
-                  </View>
-                  <View style={styles.contentCard}>
-                    <TouchableOpacity
-                      onPress={() => onDayPress(item, `timeline-${item.id}`)}
-                      ref={(ref) => {
-                        if (ref) registerDayRef(`timeline-${item.id}`, ref);
-                      }}
-                    >
-                      <Image
-                        source={{ uri: item.image_url }}
-                        style={styles.postImage}
-                        resizeMode="cover"
+                  <View style={styles.captionHeader}>
+                    <Text style={styles.goalDayText}>Day {item.dayNumber}</Text>
+                    <TouchableOpacity style={styles.menuButton}>
+                      <Ionicons
+                        name="ellipsis-horizontal"
+                        size={18}
+                        color="white"
                       />
                     </TouchableOpacity>
                   </View>
+                  <Text style={styles.captionText}>{item.caption}</Text>
+                </View>
+                <View
+                  style={[
+                    styles.contentCard,
+                    item.isCurrentUserPost && styles.contentCardRight,
+                  ]}
+                >
+                  <TouchableOpacity
+                    onPress={() => onDayPress(item, `timeline-${item.id}`)}
+                    ref={(ref) => {
+                      if (ref) registerDayRef(`timeline-${item.id}`, ref);
+                    }}
+                  >
+                    <Image
+                      source={{ uri: item.image_url }}
+                      style={styles.postImage}
+                      resizeMode="cover"
+                    />
+                  </TouchableOpacity>
                 </View>
               </View>
-            );
-          })}
+            </View>
+          ))}
         </View>
       ))}
     </View>
@@ -266,6 +319,18 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
     paddingHorizontal: 16,
     width: "100%",
+  },
+  loadingContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    minHeight: 200,
+  },
+  loadingText: {
+    fontSize: 16,
+    fontFamily: FontFamily.Medium,
+    color: "white",
+    opacity: 0.7,
+    marginTop: 12,
   },
   monthGroup: {
     marginBottom: 20,
@@ -318,6 +383,9 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     marginBottom: 16,
     width: "75%",
+    alignSelf: "flex-start",
+  },
+  contentCardRight: {
     alignSelf: "flex-end",
   },
   postImage: {
@@ -374,6 +442,12 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255, 255, 255, 0.1)",
+    marginHorizontal: -12,
+    marginTop: -12,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    borderTopLeftRadius: 5,
+    borderTopRightRadius: 20,
   },
   posterAvatar: {
     width: 24,

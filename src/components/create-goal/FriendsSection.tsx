@@ -3,9 +3,16 @@ import { getProfileImage, useAuth } from "@/hooks/useAuth";
 import { friendService } from "@/services/friendService";
 import { Ionicons } from "@expo/vector-icons";
 import React, { useEffect, useState } from "react";
-import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { ProfileAvatar } from "../../components/common";
-import FriendsBottomSheet from "./bottomSheets/FriendsBottomSheet";
+import {
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { ProfileAvatar } from "../common";
+import AndroidFriendsBottomSheet from "./bottomSheets/android/FriendsBottomSheet";
+import IOSFriendsBottomSheet from "./bottomSheets/ios/FriendsBottomSheet";
 
 interface Friend {
   id: string;
@@ -131,14 +138,24 @@ const FriendsSection: React.FC<FriendsSectionProps> = ({
         </TouchableOpacity>
       )}
 
-      {/* Friends Bottom Sheet */}
-      <FriendsBottomSheet
-        visible={showBottomSheet}
-        onClose={closeBottomSheet}
-        friends={friends}
-        selectedFriends={selectedFriends}
-        onFriendsSelect={handleFriendsSelect}
-      />
+      {/* Platform-specific Friends Bottom Sheet */}
+      {Platform.OS === "android" ? (
+        <AndroidFriendsBottomSheet
+          visible={showBottomSheet}
+          onClose={closeBottomSheet}
+          friends={friends}
+          selectedFriends={selectedFriends}
+          onFriendsSelect={handleFriendsSelect}
+        />
+      ) : (
+        <IOSFriendsBottomSheet
+          visible={showBottomSheet}
+          onClose={closeBottomSheet}
+          friends={friends}
+          selectedFriends={selectedFriends}
+          onFriendsSelect={handleFriendsSelect}
+        />
+      )}
     </View>
   );
 };
