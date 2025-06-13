@@ -85,7 +85,11 @@ const PostItem = ({
         // Stop any audio playing in this post when screen loses focus
         if (isPlaying && audioPlayer) {
           console.log(`Screen blurred - stopping audio for post ${item.id}`);
-          audioPlayer.pause();
+          try {
+            audioPlayer.pause();
+          } catch (error) {
+            console.error(`Error pausing audio on screen blur: ${error}`);
+          }
 
           // If this was the playing post, clear it
           if (audioManager.getCurrentPostId() === item.id) {
@@ -108,7 +112,7 @@ const PostItem = ({
         // If screen is not focused, ensure audio is paused
         if (isPlaying) {
           try {
-            await audioPlayer.pause();
+            await audioPlayer?.pause();
           } catch (error) {
             console.error(
               "Error pausing audio when screen is not focused:",
@@ -137,7 +141,7 @@ const PostItem = ({
             }
           } else {
             // Audio is globally disabled, ensure this post's audio is paused
-            if (isPlaying) {
+            if (isPlaying && audioPlayer) {
               try {
                 await audioPlayer.pause();
               } catch (error) {
@@ -145,7 +149,7 @@ const PostItem = ({
               }
             }
           }
-        } else if (isPlaying) {
+        } else if (isPlaying && audioPlayer) {
           // This post is no longer in view, pause the audio
           console.log("Pausing audio for post", item.id);
           try {
@@ -168,7 +172,7 @@ const PostItem = ({
     return () => {
       isMounted = false;
 
-      if (isPlaying) {
+      if (isPlaying && audioPlayer) {
         try {
           audioPlayer.pause();
         } catch (error) {
@@ -300,31 +304,39 @@ const PostItem = ({
       // Ensure audio is active before toggling
       await AudioModule.setIsAudioActiveAsync(true);
 
-      if (isPlaying) {
-        // Properly stop audio playback
-        await audioPlayer.pause();
+      if (isPlaying && audioPlayer) {
+        try {
+          // Properly stop audio playback
+          await audioPlayer.pause();
 
-        // Set global audio state to disabled
-        audioManager.setAudioEnabled(false);
+          // Set global audio state to disabled
+          audioManager.setAudioEnabled(false);
 
-        // If this was the playing post, clear it
-        if (audioManager.getCurrentPostId() === item.id) {
-          audioManager.setCurrentPostId(null);
+          // If this was the playing post, clear it
+          if (audioManager.getCurrentPostId() === item.id) {
+            audioManager.setCurrentPostId(null);
+          }
+        } catch (error) {
+          console.error("Error pausing audio:", error);
         }
-      } else {
-        // Enable global audio
-        audioManager.setAudioEnabled(true);
+      } else if (audioPlayer) {
+        try {
+          // Enable global audio
+          audioManager.setAudioEnabled(true);
 
-        // First, stop any currently playing audio
-        const currentPlayingId = audioManager.getCurrentPostId();
-        if (currentPlayingId && currentPlayingId !== item.id) {
-          // This means another post's audio is playing, we should stop it
-          // The audio will be stopped automatically when this post becomes current
+          // First, stop any currently playing audio
+          const currentPlayingId = audioManager.getCurrentPostId();
+          if (currentPlayingId && currentPlayingId !== item.id) {
+            // This means another post's audio is playing, we should stop it
+            // The audio will be stopped automatically when this post becomes current
+          }
+
+          // Set this as the current playing post
+          audioManager.setCurrentPostId(item.id);
+          await audioPlayer.play();
+        } catch (error) {
+          console.error("Error playing audio:", error);
         }
-
-        // Set this as the current playing post
-        audioManager.setCurrentPostId(item.id);
-        await audioPlayer.play();
       }
 
       // Provide haptic feedback when toggling audio
